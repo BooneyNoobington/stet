@@ -17,15 +17,25 @@ final class BookSession: ObservableObject {
     @Published private(set) var unplacedSceneIDs: [String] = []
 
     /// Editor text not yet written to disk.
-    @Published private(set) var isWritingPending = false
+    @Published var isWritingPending = false
     /// Changes on disk that aren't in a saved version yet.
-    @Published private(set) var hasChangesSinceVersion = false
-    @Published private(set) var lastVersion: Git.Commit?
+    @Published var hasChangesSinceVersion = false
+    @Published var lastVersion: Git.Commit?
 
     @Published var toast: Toast?
     @Published var errorMessage: String?
     @Published private(set) var syncFinding: SyncLocation.Finding?
     @Published private(set) var health: HealthCheck.Report?
+
+    // Versions: main version, experiments, milestones (see BookSession+Versions.swift)
+    @Published var mainBranch = "main"
+    @Published var branch = "main"
+    @Published var branchName = "Hauptfassung"
+    @Published var experiments: [Experiment] = []
+    @Published var milestones: [Milestone] = []
+    @Published var sheet: Sheet?
+    @Published var adoption: Adoption?
+    @Published var isBusy = false
 
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
@@ -88,6 +98,8 @@ final class BookSession: ObservableObject {
         hasChangesSinceVersion = !((try? await book.git.changedPaths()) ?? []).isEmpty
         let report = await HealthCheck.run(book)
         health = report.isHealthy ? nil : report
+        await refreshVersions()
+        await resumeAdoptionIfNeeded()
     }
 
     /// Writes everything to disk and takes a snapshot. Called before closing or quitting.
@@ -102,7 +114,7 @@ final class BookSession: ObservableObject {
 
     // MARK: - Scene info for the navigator
 
-    private func reloadSceneInfo() {
+    func reloadSceneInfo() {
         manifest = book.manifest
         unplacedSceneIDs = book.unplacedSceneIDs()
         for id in manifest.sceneIDs + unplacedSceneIDs {
@@ -129,9 +141,9 @@ final class BookSession: ObservableObject {
 
     // MARK: - Selecting and editing scenes
 
-    func select(_ id: String?) async {
-        guard let id, id != selectedSceneID else { return }
-        await persist()
+    func select(_ id: String?, force: Bool = false) async {
+        guard let id, force || id != selectedSceneID else { return }
+        if !force { await persist() }
         do {
             let scene = try book.readScene(id)
             comparison = nil
@@ -171,7 +183,8 @@ final class BookSession: ObservableObject {
     }
 
     private func writeCurrentScene() async {
-        guard var scene = currentScene else { return }
+        // During an adoption the files hold merge results; the editor must not overwrite them.
+        guard adoption == nil, var scene = currentScene else { return }
         if isWritingPending {
             guard let text = try? await editor.text() else { return }
             scene.body = text
@@ -311,7 +324,7 @@ final class BookSession: ObservableObject {
         }
     }
 
-    private func showToast(_ toast: Toast) {
+    func showToast(_ toast: Toast) {
         self.toast = toast
         let shown = toast
         Task { [weak self] in
@@ -326,6 +339,7 @@ final class BookSession: ObservableObject {
     }
 
     func persistAndSnapshot() async {
+        guard adoption == nil else { return }
         await persist()
         _ = try? await book.snapshot(device: DeviceID.current)
     }

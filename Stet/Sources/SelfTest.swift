@@ -142,6 +142,7 @@ enum SelfTest {
         report["import"] = [
             "chapters": imported.chapters, "scenes": imported.scenes, "words": imported.words,
             "commitsKept": imported.commitsKept, "experiments": imported.experiments.count,
+            "shelvedExperiments": imported.shelvedExperiments.count,
             "moved": imported.moved.count, "removed": imported.removed.count, "warnings": imported.warnings.count,
         ]
         report["sourceSyncService"] = SyncLocation.detect(source)?.service ?? "none"
@@ -234,6 +235,50 @@ enum SelfTest {
         await session.saveVersion()
         let structureVersion = try? await book.git.log(limit: 1).first
         check(structureVersion?.subject.contains("Struktur geändert") == true, "structureVersion")
+
+        // Experiments: start one, edit the same paragraph there and in the main version,
+        // adopt it with a decision, set a milestone, shelve the experiment.
+        func editFirstParagraph(_ addition: String) async {
+            let text = (try? await editor.text()) ?? ""
+            let changed = text.range(of: "\n").map { text[..<$0.lowerBound] + addition + text[$0.lowerBound...] } ?? Substring(text + addition)
+            try? await editor.replaceText(String(changed))
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        await session.select(first)
+        let mainText = (try? await editor.text()) ?? ""
+        await session.startExperiment(named: "Selbsttest Experiment", carryChanges: false)
+        check(session.isOnExperiment, "experimentStarted")
+        await editFirstParagraph(" (Experiment)")
+        await session.saveVersion()
+        await session.switchTo(session.mainBranch)
+        check(!session.isOnExperiment, "backOnMain")
+        check(((try? await editor.text()) ?? "") == mainText, "mainUntouchedByExperiment")
+        await editFirstParagraph(" (Hauptfassung)")
+        await session.saveVersion()
+
+        if let experiment = session.activeExperiments.first(where: { $0.name == "Selbsttest Experiment" }) {
+            await session.adoptAll(experiment)
+            check(session.adoption?.conflicts.count == 1, "adoptionHasOneConflict")
+            if let conflict = session.adoption?.conflicts.first, case .text(let segments) = conflict.kind {
+                for (index, segment) in segments.enumerated() {
+                    if case .conflict = segment { session.choose(.experiment, for: conflict, passage: index) }
+                }
+            }
+            await session.finishAdoption()
+            check(session.adoption == nil, "adoptionFinished")
+            let adopted = (try? await editor.text()) ?? ""
+            check(adopted.contains("(Experiment)") && !adopted.contains("(Hauptfassung)"), "decisionApplied")
+            check(!adopted.contains("<<<<<<<") && !adopted.contains(">>>>>>>"), "noConflictMarkers")
+            check(((try? await book.git.log(limit: 1).first)?.parents.count) == 2, "adoptionIsMerge")
+        } else {
+            check(false, "experimentListed")
+        }
+        await session.setMilestone(name: "Selbsttest Meilenstein", note: "")
+        check(session.milestones.contains { $0.name == "Selbsttest Meilenstein" }, "milestone")
+        if let experiment = session.activeExperiments.first(where: { $0.name == "Selbsttest Experiment" }) {
+            await session.shelve(experiment)
+        }
+        check(session.shelvedExperiments.contains { $0.name == "Selbsttest Experiment" }, "shelved")
 
         // Health and location
         check((await HealthCheck.run(book)).isHealthy, "healthy")

@@ -54,6 +54,27 @@ struct StetCommands: Commands {
             .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(model.session == nil)
         }
+        CommandMenu("Fassung") {
+            Button("Neues Experiment …") { model.session?.sheet = .startExperiment }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(model.session == nil)
+            Button("Zur Hauptfassung") {
+                if let session = model.session { Task { await session.switchTo(session.mainBranch) } }
+            }
+            .disabled(model.session?.isOnExperiment != true)
+            Button("Experiment übernehmen …") {
+                if let current = model.session?.currentExperiment { model.session?.sheet = .adopt(current) }
+            }
+            .disabled(model.session?.currentExperiment == nil)
+            Button("Experiment ablegen") {
+                if let session = model.session, let current = session.currentExperiment { Task { await session.shelve(current) } }
+            }
+            .disabled(model.session?.currentExperiment == nil)
+            Divider()
+            Button("Meilenstein setzen …") { model.session?.sheet = .milestone }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                .disabled(model.session == nil)
+        }
         CommandGroup(after: .toolbar) {
             Picker("Schrift", selection: $editor.settings.font) {
                 ForEach(EditorSettings.Font.allCases) { Text($0.label).tag($0) }

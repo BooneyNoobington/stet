@@ -4,7 +4,7 @@
 
 Stet is a macOS app for long-form creative writing that keeps a lossless, branchable history of the work using git, without the writer ever seeing git. In one sentence: **GitKraken for writers.**
 
-Status: design agreed in discussion (Nov 2026). Sections marked **Open** still need a decision.
+Status: Phases 1 (core) and 2 (experiments) are built (Nov 2026). Sections marked **Open** still need a decision.
 
 ---
 
@@ -186,15 +186,19 @@ The prototype validated this choice (see `docs/editor-spike.md`): automated chec
 
 ## 8. Experiments, merging, milestones
 
-- **Start experiment** → `git switch -c experiments/<slug>`; the name is required and descriptive ("Kapitel 3 aus Maras Sicht").
-- Switching between main and an experiment **saves first**, so there is never an "unsaved changes" dialog or a stash.
-- **Adopt experiment** → `git merge --no-ff --no-commit experiments/<slug>`:
-  - Files changed on one side only, or in different paragraphs, are merged automatically. A paragraph is one line in Markdown, so git's line merge works per paragraph.
-  - **Conflicts** are presented per paragraph: *Main* | *Experiment*, with **Keep this / Keep that / Edit**. Stet reads the three versions from the index stages (`:1:`, `:2:`, `:3:`) and never shows conflict markers.
-  - `manuscript.yaml` is merged by Stet itself (three-way merge of the structure as lists and maps), never as text.
-- **Adopt some scenes** → copy the chosen scene files from the experiment, then a normal commit with `Stet-Adopted-From: experiments/<slug> <sha>`.
-- **Shelve** → rename to `shelved/<slug>`. Shelved experiments are never deleted.
-- **Milestones** → annotated tags, created manually ("Sent to club") or automatically on every export.
+- **Start experiment** → `git switch --create experiments/<slug>`. The name is required ("Kapitel 3 aus Maras Sicht"); the slug keeps umlauts and case (`Kapitel-3-aus-Maras-Sicht`), and the full name is stored as the branch description. Unsaved changes either move into the experiment or are first saved as a version where they are; the writer chooses.
+- **Switching** saves pending changes as a version first, so there is never an "unsaved changes" dialog or a stash. Branches without `manuscript.yaml` (from before Stet) can't be opened, but they can be adopted.
+- A tinted banner and the toolbar's version menu always show which version is open.
+- **Adopt experiment** → `git merge --no-ff --no-commit experiments/<slug>` into the main version:
+  - **Structure.** `manuscript.yaml` is merged by Stet whenever both sides changed it (`Manifest.merge`). Each side's additions, removals, moves and renames are kept. A new scene follows its predecessor from the experiment. Removing beats moving. If both sides changed the same field, the main version wins. Without a common ancestor (two imported branches), only what both share counts as "before", so nothing is lost.
+  - **Scenes.** A scene's front matter and prose are merged separately. Otherwise a title change on one side and an edit of the opening paragraph on the other would collide, because the title block sits directly above it. For scenes from before an import, the common ancestor is found by the scene's title (`Szenen/<Titel>.md`).
+  - **Conflicts.** What is left is shown per passage: *Hauptfassung* | *Experiment*, with **Diese Fassung / Beide behalten / Selbst formulieren**. A scene deleted on one side and edited on the other offers **Behalten / Löschen**. A kept scene goes back where the experiment has it. Files that can't be merged as text offer a choice of side. Conflict markers are never shown.
+  - **Finishing** writes one version with both histories as parents (`Stet-Adopted-From: <branch> <sha>`), after removing structure entries whose files are gone. **Cancelling** (`git merge --abort`) leaves everything as before.
+  - While an adoption is open, nothing writes to the working tree (autosave, snapshots and versions are blocked). After a crash or quit, a banner offers to continue or cancel.
+- **Adopt some scenes** → copies the chosen scene files from the experiment into the main version; new scenes are placed as in the experiment. One normal version with `Stet-Adopted-From:`.
+- **Shelve** → rename to `shelved/<slug>`. Shelved experiments can be brought back and are never deleted. Adopted experiments stay listed as "übernommen" until shelved.
+- **Milestones** → annotated tags `milestone/<slug>` on the current version (pending changes are saved first). The tag message holds the name and an optional note. Milestones show as flags in a scene's history.
+- **Import**: other branches of an imported repository that are fully merged are shelved. Branches with their own work become experiments, converted to the Stet layout with the same scene and chapter IDs as the main version, so they open and adopt cleanly.
 - **Diffs** are shown word-level within paragraphs and rendered by Stet, not git's line diff.
 
 ## 9. Comments, TODOs, feedback

@@ -69,6 +69,25 @@ public struct SceneFile: Equatable {
         rawHeader = nil
     }
 
+    /// Three-way merge of the front matter, key by key: a side's change wins over the unchanged
+    /// other side; if both changed the same key, `ours` wins. The body is taken from `ours`.
+    static func mergingFrontMatter(base: SceneFile?, ours: SceneFile, theirs: SceneFile) -> SceneFile {
+        guard ours.meta != theirs.meta else { return ours }
+        var keys: [Node] = ours.meta.map(\.key)
+        for key in theirs.meta.map(\.key) where !keys.contains(key) { keys.append(key) }
+        var merged = Node.Mapping([])
+        for key in keys {
+            let b = base?.meta[key], o = ours.meta[key], t = theirs.meta[key]
+            if let value = (o == b ? t : o) { merged[key] = value }
+        }
+        var result = ours
+        if merged != ours.meta {
+            result.meta = merged
+            result.rawHeader = nil
+        }
+        return result
+    }
+
     // MARK: Parsing and serializing
 
     public static func parse(id: String, text: String) -> SceneFile {

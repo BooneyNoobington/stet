@@ -62,7 +62,8 @@ final class ImporterTests: TempDirTestCase {
         XCTAssertEqual(report.chapters, 3, "Prolog, Erstes Kapitel, Nicht zugeordnet")
         XCTAssertEqual(report.scenes, 4)
         XCTAssertEqual(report.commitsKept, 2)
-        XCTAssertEqual(report.experiments, ["albtraum"])
+        XCTAssertEqual(report.experiments, [], "albtraum has nothing of its own")
+        XCTAssertEqual(report.shelvedExperiments, ["albtraum"])
         XCTAssertEqual(Set(report.removed), ["book.yaml", "build_book.py", "README.md"])
 
         let book = try Book(url: destination)
@@ -93,7 +94,7 @@ final class ImporterTests: TempDirTestCase {
         XCTAssertTrue(changed.isEmpty)
         let remotes = try await book.git.run(["remote"]).string
         XCTAssertEqual(remotes, "")
-        let experiment = await book.git.resolve("refs/heads/experiments/albtraum")
+        let experiment = await book.git.resolve("refs/heads/shelved/albtraum")
         XCTAssertNotNil(experiment)
 
         // The scene's history follows the rename back into the original repository.
@@ -109,6 +110,41 @@ final class ImporterTests: TempDirTestCase {
         let sourceStatus = try await git(["status", "--porcelain"], in: source)
         XCTAssertEqual(sourceStatus, "")
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.appendingPathComponent("book.yaml").path))
+    }
+
+    func testBranchWithOwnWorkBecomesAnAdoptableExperiment() async throws {
+        try await makeSourceRepository()
+        try await git(["switch", "--quiet", "-c", "umbau"], in: source)
+        try write("Der Wind kam von Westen. Er roch nach Tang und Teer.\n", to: "Szenen/Ankunft.md", in: source)
+        try write("Eine Szene, die es nur im Umbau gibt.\n", to: "Szenen/Neu.md", in: source)
+        try write(bookYAML.replacingOccurrences(of: "      - \"Übergabe\"\n", with: "      - \"Übergabe\"\n      - \"Neu\"\n"), to: "book.yaml", in: source)
+        try await git(["add", "-A"], in: source)
+        try await git(["commit", "--quiet", "-m", "Umbau"], in: source)
+        try await git(["switch", "--quiet", "main"], in: source)
+
+        let report = try await Importer.importFolder(source, to: destination)
+        XCTAssertEqual(report.experiments, ["umbau"])
+        XCTAssertEqual(report.shelvedExperiments, ["albtraum"])
+
+        let book = try Book(url: destination)
+        let current = await book.currentBranch()
+        XCTAssertEqual(current, "main")
+        let ankunft = book.manifest.chapters[0].sceneIDs[0]
+        let experiments = await book.experiments()
+        let umbau = try XCTUnwrap(experiments.first { $0.branch == "experiments/umbau" })
+        XCTAssertTrue(umbau.isStetBook, "converted to the Stet layout")
+
+        // Same scene IDs as the main version, so the experiment opens and adopts cleanly.
+        try await book.switchTo(umbau.branch)
+        XCTAssertEqual(book.manifest.chapters[0].sceneIDs.first, ankunft)
+        XCTAssertTrue(try book.readScene(ankunft).body.contains("Teer"))
+        try await book.switchTo("main")
+
+        let result = try await book.adopt(umbau.branch)
+        guard case .adopted = result else { return XCTFail("\(result)") }
+        XCTAssertTrue(try book.readScene(ankunft).body.contains("Teer"))
+        let titles = try book.manifest.chapters.map { try $0.sceneIDs.map { try book.readScene($0).title ?? "?" } }
+        XCTAssertEqual(titles.first, ["Ankunft", "Übergabe", "Neu"])
     }
 
     func testUncommittedChangesAreCarriedOver() async throws {

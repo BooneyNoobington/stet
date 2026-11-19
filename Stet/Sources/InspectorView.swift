@@ -120,7 +120,7 @@ private struct HistoryList: View {
                         Task { await session.compare(with: version) }
                     }
                 )) { version in
-                    HistoryRow(version: version).tag(version.id)
+                    HistoryRow(version: version, milestone: session.milestone(at: version.commit.hash)).tag(version.id)
                 }
                 .listStyle(.inset)
             }
@@ -130,6 +130,7 @@ private struct HistoryList: View {
 
 private struct HistoryRow: View {
     let version: Book.SceneVersion
+    let milestone: Milestone?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -147,6 +148,11 @@ private struct HistoryRow: View {
                 if let delta = version.commit.trailers["Stet-Words-Delta"], delta != "0" {
                     Text(delta).font(.caption).monospacedDigit().foregroundStyle(.secondary)
                 }
+            }
+            if let milestone {
+                Label(milestone.name, systemImage: "flag.fill")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.purple)
             }
             if let note = version.commit.note {
                 Text(note).font(.callout)

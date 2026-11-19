@@ -32,6 +32,9 @@ struct BookView: View {
         .navigationTitle(session.manifest.title)
         .navigationSubtitle(session.currentScene?.displayTitle ?? "")
         .toolbar {
+            ToolbarItem(placement: .navigation) {
+                VersionMenu(session: session)
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     Task { await session.saveVersion() }
@@ -70,6 +73,21 @@ struct BookView: View {
         }
         .onChange(of: editor.settings) {
             Task { await editor.applySettings() }
+        }
+        .sheet(item: $session.sheet) { sheet in
+            switch sheet {
+            case .startExperiment: StartExperimentSheet(session: session)
+            case .adopt(let experiment): AdoptSheet(session: session, experiment: experiment)
+            case .conflicts: ConflictSheet(session: session)
+            case .milestone: MilestoneSheet(session: session)
+            }
+        }
+        .overlay {
+            if session.isBusy && session.sheet == nil {
+                ProgressView()
+                    .padding(20)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            }
         }
         .alert("Fehler", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK") { session.errorMessage = nil }
@@ -123,6 +141,17 @@ struct Banners: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let adoption = session.adoption, session.sheet == nil {
+                Banner(symbol: "arrow.triangle.merge", text: "Die Übernahme von „\(adoption.name)“ ist noch nicht abgeschlossen.", tint: .purple) {
+                    Button("Fortsetzen …") { session.sheet = .conflicts }
+                    Button("Abbrechen") { Task { await session.cancelAdoption() } }
+                }
+            } else if session.isOnExperiment, let experiment = session.currentExperiment {
+                Banner(symbol: "flask", text: "Experiment „\(experiment.name)“ – was du hier schreibst, ändert die Hauptfassung nicht.", tint: .purple) {
+                    Button("Übernehmen …") { session.sheet = .adopt(experiment) }
+                    Button("Zur Hauptfassung") { Task { await session.switchTo(session.mainBranch) } }
+                }
+            }
             if let finding = session.syncFinding {
                 Banner(
                     symbol: "exclamationmark.icloud",
@@ -155,11 +184,12 @@ struct Banners: View {
 struct Banner<Actions: View>: View {
     let symbol: String
     let text: String
+    var tint: Color = .orange
     @ViewBuilder let actions: Actions
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: symbol).foregroundStyle(.orange)
+            Image(systemName: symbol).foregroundStyle(tint)
             Text(text).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 12)
             actions
@@ -167,7 +197,7 @@ struct Banner<Actions: View>: View {
         .font(.callout)
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
-        .background(Color.orange.opacity(0.1))
+        .background(tint.opacity(0.1))
         .overlay(alignment: .bottom) { Divider() }
     }
 }

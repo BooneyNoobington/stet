@@ -15,6 +15,8 @@ public enum Importer {
         public var words = 0
         public var commitsKept = 0
         public var experiments: [String] = []
+        /// Branches whose work is already in the main version; kept, but set aside.
+        public var shelvedExperiments: [String] = []
         public var formerRemotes: [String] = []
         public var moved: [String] = []
         public var removed: [String] = []
@@ -70,57 +72,117 @@ public enum Importer {
             try await git.initRepository()
         }
 
-        // 2. Convert the layout in the copy.
+        // 2. Convert the layout in the copy and save that as one version.
+        var ids = IDMap()
+        guard let summary = try await convertWorkingTree(destination, sourceName: source.lastPathComponent, ids: &ids, report: &report) else {
+            try? fm.removeItem(at: destination)
+            throw ImportError.noScenes(source)
+        }
+        report.title = summary.title
+        report.chapters = summary.chapters
+        report.scenes = summary.scenes
+        report.words = summary.words
+
+        // 3. Other branches: already merged ones are shelved; the rest become experiments,
+        //    converted with the same scene and chapter IDs so they can be adopted later.
+        if isRepository, !report.experiments.isEmpty {
+            let main = await git.currentBranch() ?? "main"
+            var active: [String] = []
+            for name in report.experiments {
+                let branch = Book.experimentPrefix + name
+                let merged = try await git.run(["merge-base", "--is-ancestor", branch, "HEAD"], allowedStatus: [0, 1]).status == 0
+                if merged {
+                    try await git.run(["branch", "--move", branch, Book.shelvedPrefix + name])
+                    report.shelvedExperiments.append(name)
+                    continue
+                }
+                try await git.run(["switch", "--quiet", branch])
+                if !fm.fileExists(atPath: destination.appendingPathComponent(Manifest.fileName).path) {
+                    var branchReport = Report()
+                    _ = try await convertWorkingTree(destination, sourceName: source.lastPathComponent, ids: &ids, report: &branchReport)
+                }
+                active.append(name)
+            }
+            try await git.run(["switch", "--quiet", main])
+            report.experiments = active
+        }
+        return report
+    }
+
+    /// Scene and chapter IDs by name, shared between the conversions of all branches.
+    struct IDMap {
+        var scenes: [String: String] = [:]
+        var chapters: [String: String] = [:]
+        var all: Set<String> { Set(scenes.values).union(chapters.values) }
+
+        mutating func scene(_ name: String) -> String {
+            let key = name.precomposedStringWithCanonicalMapping
+            if let id = scenes[key] { return id }
+            let id = StetID.make(avoiding: all)
+            scenes[key] = id
+            return id
+        }
+
+        mutating func chapter(_ title: String) -> String {
+            if let id = chapters[title] { return id }
+            let id = StetID.make(prefix: "c", avoiding: all)
+            chapters[title] = id
+            return id
+        }
+    }
+
+    /// Converts the checked-out tree into Stet's layout and commits it.
+    /// Returns nil (and changes nothing) if there are no scenes.
+    static func convertWorkingTree(_ destination: URL, sourceName: String, ids: inout IDMap, report: inout Report) async throws
+        -> (title: String, chapters: Int, scenes: Int, words: Int)?
+    {
+        let fm = FileManager.default
         let config = readBookConfig(in: destination)
         let sceneFolderName = config?.sceneFolder ?? ""
         let sceneFolder = sceneFolderName.isEmpty ? destination : destination.appendingPathComponent(sceneFolderName)
         let available = markdownFiles(in: sceneFolder)
         var used = Set<String>()
-        var ids = Set<String>()
         var structure: [StructureNode] = []
+        var moves: [(file: String, title: String, id: String)] = []
 
-        func importScene(named name: String) throws -> String? {
-            guard let file = match(name, in: available) else {
+        func plan(_ name: String) -> String? {
+            guard let file = match(name, in: available), !used.contains(file) else {
                 report.warnings.append("Szene „\(name)“ steht in book.yaml, die Datei fehlt.")
                 return nil
             }
             used.insert(file)
-            let id = StetID.make(avoiding: ids)
-            ids.insert(id)
-            try moveScene(file: sceneFolder.appendingPathComponent(file), title: name, id: id, into: destination, report: &report)
+            let id = ids.scene(name)
+            moves.append((file, name, id))
             return id
         }
 
-        try fm.createDirectory(at: destination.appendingPathComponent(Book.scenesFolder), withIntermediateDirectories: true)
         if let config, !config.chapters.isEmpty {
             for chapter in config.chapters {
-                let sceneIDs = try chapter.scenes.compactMap(importScene(named:))
-                let chapterID = StetID.make(prefix: "c", avoiding: ids)
-                ids.insert(chapterID)
-                structure.append(.chapter(Chapter(id: chapterID, title: chapter.title, sceneIDs: sceneIDs)))
+                let sceneIDs = chapter.scenes.compactMap(plan)
+                structure.append(.chapter(Chapter(id: ids.chapter(chapter.title), title: chapter.title, sceneIDs: sceneIDs)))
             }
         }
         let leftovers = available.filter { !used.contains($0) && !(sceneFolderName.isEmpty && isRootDocument($0)) }
         if !leftovers.isEmpty {
-            let sceneIDs = try leftovers.compactMap { try importScene(named: String($0.dropLast(3))) }
-            let chapterID = StetID.make(prefix: "c", avoiding: ids)
             let title = structure.isEmpty ? "Kapitel 1" : "Nicht zugeordnet"
-            structure.append(.chapter(Chapter(id: chapterID, title: title, sceneIDs: sceneIDs)))
-            if !structure.isEmpty && config != nil {
+            let sceneIDs = leftovers.compactMap { plan(String($0.dropLast(3))) }
+            structure.append(.chapter(Chapter(id: ids.chapter(title), title: title, sceneIDs: sceneIDs)))
+            if config != nil, title != "Kapitel 1" {
                 report.warnings.append("\(leftovers.count) Szene(n) standen in keinem Kapitel und liegen jetzt in „\(title)“.")
             }
         }
-        guard structure.contains(where: { if case .chapter(let c) = $0 { return !c.sceneIDs.isEmpty } else { return false } }) else {
-            try? fm.removeItem(at: destination)
-            throw ImportError.noScenes(source)
+        guard !moves.isEmpty else { return nil }
+
+        try fm.createDirectory(at: destination.appendingPathComponent(Book.scenesFolder), withIntermediateDirectories: true)
+        for move in moves {
+            try moveScene(file: sceneFolder.appendingPathComponent(move.file), title: move.title, id: move.id, into: destination, report: &report)
         }
         if !sceneFolderName.isEmpty, (try? fm.contentsOfDirectory(atPath: sceneFolder.path))?.filter({ $0 != ".DS_Store" }).isEmpty == true {
             try? fm.removeItem(at: sceneFolder)
         }
 
-        // 3. Everything else: assets, notes, tooling.
         var manifest = Manifest(
-            title: config?.title ?? source.deletingPathExtension().lastPathComponent,
+            title: config?.title ?? URL(fileURLWithPath: sourceName).deletingPathExtension().lastPathComponent,
             authors: config?.authors ?? [],
             language: config?.language ?? "de",
             structure: structure
@@ -130,18 +192,16 @@ public enum Importer {
         try Book.writeGitignore(in: destination)
 
         let book = try Book(url: destination)
-        report.title = manifest.title
-        report.chapters = manifest.chapters.count
-        report.scenes = manifest.sceneIDs.count
-        report.words = book.totalWords()
+        let words = book.totalWords()
+        let chapters = manifest.chapters.count, scenes = manifest.sceneIDs.count
 
-        // 4. One commit for the whole conversion.
-        var body = ["Übernommen aus „\(source.lastPathComponent)“: \(report.chapters) Kapitel, \(report.scenes) Szenen."]
+        var body = ["Übernommen aus „\(sourceName)“: \(chapters) Kapitel, \(scenes) Szenen."]
         if !report.removed.isEmpty { body.append("Ersetzt durch Stet (bleiben in der Historie): " + report.removed.joined(separator: ", ")) }
-        let message = "Nach Stet übernommen\n\n" + body.joined(separator: "\n") + "\n\nStet-Words: \(report.words)\nStet-Imported-From: \(source.lastPathComponent)\n"
+        let message = "Nach Stet übernommen\n\n" + body.joined(separator: "\n") + "\n\nStet-Words: \(words)\nStet-Imported-From: \(sourceName)\n"
+        let git = Git(directory: destination)
         let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet")
         _ = try await git.commitAll(message: message, identity: identity)
-        return report
+        return (manifest.title, chapters, scenes, words)
     }
 
     // MARK: - book.yaml

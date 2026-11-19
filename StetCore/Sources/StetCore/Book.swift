@@ -128,6 +128,11 @@ public final class Book {
         try saveManifest()
     }
 
+    func replaceManifest(_ manifest: Manifest, yaml: String) {
+        self.manifest = manifest
+        self.writtenManifestYAML = yaml
+    }
+
     private func saveManifest() throws {
         let yaml = manifest.yaml()
         guard yaml != writtenManifestYAML else { return }
@@ -184,7 +189,9 @@ extension Book {
     }
 
     /// Commits everything as a new version. Returns nil when nothing changed since the last one.
-    public func saveVersion(activeMinutes: Int? = nil) async throws -> SaveResult? {
+    /// `subject` replaces the generated description (the word delta is still appended).
+    public func saveVersion(activeMinutes: Int? = nil, subject customSubject: String? = nil, extraTrailers: [String] = []) async throws -> SaveResult? {
+        guard await git.resolve("MERGE_HEAD") == nil else { throw ExperimentError.adoptionInProgress }
         let changed = try await git.changedPaths()
         guard !changed.isEmpty else { return nil }
 
@@ -217,12 +224,14 @@ extension Book {
         if !removed.isEmpty { parts.append("Entfernt: " + Self.list(removed)) }
         if structureChanged { parts.append("Struktur geändert") }
         if parts.isEmpty { parts.append("Sonstige Änderungen") }
+        if let customSubject { parts = [customSubject] }
         if delta != 0 { parts.append(Self.signed(delta) + " Wörter") }
         let subject = parts.joined(separator: " · ")
 
         var trailers = ["Stet-Words: \(totalWords())", "Stet-Words-Delta: \(Self.signed(delta))"]
         if let activeMinutes, activeMinutes > 0 { trailers.append("Stet-Active-Minutes: \(activeMinutes)") }
         if !touchedScenes.isEmpty { trailers.append("Stet-Scenes: \(touchedScenes.joined(separator: ","))") }
+        trailers += extraTrailers
 
         let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet")
         let commit = try await git.commitAll(message: subject + "\n\n" + trailers.joined(separator: "\n") + "\n", identity: identity)
