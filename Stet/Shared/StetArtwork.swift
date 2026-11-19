@@ -37,13 +37,17 @@ enum StetArtwork {
         }
     }
 
-    /// The word "stet" with the dots beneath it; `baseline` is the text baseline.
-    static func drawStetMark(centerX: CGFloat, baseline: CGFloat, fontSize: CGFloat) {
-        let text = NSAttributedString(string: "stet", attributes: [.font: serif(fontSize), .foregroundColor: ink])
-        let size = text.size()
+    /// "stet." with the dots beneath the word; `baseline` is the text baseline. The period says
+    /// it with finality: let it stand. `periodShare` is how much of the period's width counts
+    /// for centering (0 = the word is centered and the period hangs, 1 = "stet." is centered).
+    static func drawStetMark(centerX: CGFloat, baseline: CGFloat, fontSize: CGFloat, periodShare: CGFloat = 0.5) {
         let font = serif(fontSize)
-        text.draw(at: CGPoint(x: centerX - size.width / 2, y: baseline + font.descender))
-        drawDots(centerX: centerX, y: baseline - fontSize * 0.2, span: size.width * 0.78, radius: fontSize * 0.042)
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
+        let wordWidth = NSAttributedString(string: "stet", attributes: attributes).size().width
+        let fullWidth = NSAttributedString(string: "stet.", attributes: attributes).size().width
+        let left = centerX - wordWidth / 2 - (fullWidth - wordWidth) * periodShare / 2
+        NSAttributedString(string: "stet.", attributes: attributes).draw(at: CGPoint(x: left, y: baseline + font.descender))
+        drawDots(centerX: left + wordWidth / 2, y: baseline - fontSize * 0.2, span: wordWidth * 0.78, radius: fontSize * 0.042)
     }
 
     // MARK: - App icon
