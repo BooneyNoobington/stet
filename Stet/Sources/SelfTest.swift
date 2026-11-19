@@ -6,6 +6,8 @@ import StetCore
 /// (0 = all checks passed). Neither prints any manuscript text.
 ///
 ///   Stet --selftest                     editor bridge: byte-exact round trips, settings, large texts
+///   Stet --selftest-window [<folder>]   full-screen capability, navigator rows after zooming and in
+///                                       full screen; optional snapshots of Stet's own windows
 ///   Stet --selftest-book <folder>       imports <folder> into a temporary book and drives the whole
 ///                                       flow: scenes, edit, version, note, snapshot, history, restore,
 ///                                       structure, health. The temporary book is deleted afterwards;
@@ -16,7 +18,7 @@ enum SelfTest {
 
     static func startIfRequested() {
         let args = CommandLine.arguments
-        isRunning = args.contains("--selftest") || args.contains("--selftest-book")
+        isRunning = args.contains("--selftest") || args.contains("--selftest-book") || args.contains("--selftest-window")
         if args.contains("--selftest") {
             armWatchdog()
             Task { @MainActor in
@@ -35,6 +37,12 @@ enum SelfTest {
                 print(error.localizedDescription)
                 exit(1)
             }
+        } else if let flag = args.firstIndex(of: "--selftest-window") {
+            armWatchdog(seconds: 90)
+            let next = args.indices.contains(flag + 1) ? args[flag + 1] : nil
+            let output = next.flatMap { $0.hasPrefix("--") ? nil : URL(fileURLWithPath: $0) }
+            let experiment = args.contains("--experiment")
+            Task { @MainActor in await runWindow(snapshots: output, inExperiment: experiment) }
         } else if let flag = args.firstIndex(of: "--selftest-book"), args.indices.contains(flag + 1) {
             armWatchdog(seconds: 120)
             let source = URL(fileURLWithPath: args[flag + 1])
@@ -103,6 +111,158 @@ enum SelfTest {
         for words in [15_000, 60_000] {
             report["stress\(words)"] = try? await editor.stressTest(words: words)
         }
+        finish(report, failures: failures)
+    }
+
+    // MARK: - Window: full screen and resizing
+
+    /// Opens a small test book, checks that the window can go full screen and that the
+    /// navigator keeps its rows when the window is zoomed. With a folder, it also writes
+    /// snapshots of the window contents there (before.png, zoomed.png).
+    @MainActor
+    static func runWindow(snapshots folder: URL?, inExperiment: Bool = false) async {
+        var report: [String: Any] = [:]
+        var failures: [String] = []
+        func check(_ ok: Bool, _ name: String) {
+            report[name] = ok
+            if !ok { failures.append(name) }
+        }
+        let fm = FileManager.default
+        let work = fm.temporaryDirectory.appendingPathComponent("StetWindowTest-\(UUID().uuidString)")
+        try? fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+
+        let model = AppModel.shared
+        await model.editor.waitUntilReady()
+        try? await Task.sleep(for: .seconds(0.5))
+        if let welcome = NSApp.windows.first(where: { $0.isVisible && $0.styleMask.contains(.titled) }) {
+            report["welcomeFullScreenPrimary"] = welcome.collectionBehavior.contains(.fullScreenPrimary)
+            report["welcomeResizable"] = welcome.styleMask.contains(.resizable)
+            report["welcomeZoomButtonEnabled"] = welcome.standardWindowButton(.zoomButton)?.isEnabled ?? false
+        }
+        do {
+            let book = try await Book.create(at: work.appendingPathComponent("Fenstertest.stet"), title: "Fenstertest", author: "Test")
+            for title in ["Zweites Kapitel", "Drittes Kapitel"] {
+                let chapter = try book.addChapter(title: title, after: book.manifest.chapters.last?.id)
+                _ = try book.addScene(toChapter: chapter.id, after: chapter.sceneIDs.first)
+            }
+            try await book.saveVersion()
+            await model.open(book.url)
+            if inExperiment {
+                await model.session?.startExperiment(named: "Kapitel drei aus Maras Sicht", carryChanges: false)
+                report["onExperiment"] = model.session?.isOnExperiment ?? false
+            }
+        } catch {
+            finish(["error": error.localizedDescription], failures: ["setup"])
+        }
+        try? await Task.sleep(for: .seconds(1.5))
+
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.title.contains("Fenstertest") }) ?? NSApp.mainWindow else {
+            finish(report, failures: ["no window"])
+        }
+        let behavior = window.collectionBehavior
+        report["styleMaskResizable"] = window.styleMask.contains(.resizable)
+        report["zoomButtonEnabled"] = window.standardWindowButton(.zoomButton)?.isEnabled ?? false
+        report["windowClass"] = String(describing: type(of: window))
+        report["fullScreenPrimary"] = behavior.contains(.fullScreenPrimary)
+        report["fullScreenNone"] = behavior.contains(.fullScreenNone)
+        report["fullScreenAuxiliary"] = behavior.contains(.fullScreenAuxiliary)
+        report["contentMaxSize"] = "\(window.contentMaxSize)"
+        report["maxSize"] = "\(window.maxSize)"
+        report["frame"] = "\(window.frame)"
+        report["screen"] = "\(window.screen?.visibleFrame ?? .zero)"
+        check(behavior.contains(.fullScreenPrimary) && !behavior.contains(.fullScreenNone), "canGoFullScreen")
+
+        func rows() -> [String: Any] {
+            var tables: [NSTableView] = []
+            func collect(_ view: NSView) {
+                if let table = view as? NSTableView { tables.append(table) }
+                view.subviews.forEach(collect)
+            }
+            window.contentView.map(collect)
+            guard let table = tables.first else { return ["tables": 0] }
+            let visible = table.rows(in: table.visibleRect)
+            return [
+                "tables": tables.count,
+                "rows": table.numberOfRows,
+                "visibleRows": visible.length,
+                "tableFrame": "\(table.frame)",
+                "clipBounds": "\(table.enclosingScrollView?.contentView.bounds ?? .zero)",
+                "scrollFrame": "\(table.enclosingScrollView?.frame ?? .zero)",
+            ]
+        }
+        /// The window's real pixels (an app may capture its own windows).
+        func snapshot(_ name: String) {
+            guard let folder,
+                  let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(window.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
+            else { return }
+            try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("\(name).png"))
+        }
+
+        report["contentMinSize"] = "\(window.contentMinSize)"
+        report["minSize"] = "\(window.minSize)"
+
+        // Start from a smaller window, like a user would before clicking the green button.
+        if let visible = window.screen?.visibleFrame {
+            window.setFrame(CGRect(x: visible.minX + 60, y: visible.minY + 60, width: 1100, height: 720), display: true)
+            try? await Task.sleep(for: .seconds(1))
+        }
+        report["frameSmall"] = "\(window.frame)"
+        report["minSizeSmall"] = "\(window.minSize) / content \(window.contentMinSize)"
+        report["maxSizeSmall"] = "\(window.maxSize) / content \(window.contentMaxSize)"
+        report["fullScreenPrimarySmall"] = window.collectionBehavior.contains(.fullScreenPrimary)
+        let before = rows()
+        report["navigatorBefore"] = before
+        snapshot("before")
+
+        window.zoom(nil)
+        try? await Task.sleep(for: .seconds(1.5))
+        let zoomed = rows()
+        report["navigatorZoomed"] = zoomed
+        report["frameZoomed"] = "\(window.frame)"
+        snapshot("zoomed")
+        report["fullScreenPrimaryZoomed"] = window.collectionBehavior.contains(.fullScreenPrimary)
+        report["maxSizeZoomed"] = "\(window.maxSize) / content \(window.contentMaxSize)"
+        check((zoomed["visibleRows"] as? Int ?? 0) > 0 && (zoomed["visibleRows"] as? Int) == (before["visibleRows"] as? Int), "navigatorSurvivesZoom")
+
+        window.zoom(nil)
+        try? await Task.sleep(for: .seconds(1))
+
+        // What the green button does: full screen. The window must be key, as it is when clicked.
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .seconds(1))
+        window.toggleFullScreen(nil)
+        try? await Task.sleep(for: .seconds(5))
+        // Informational: macOS only lets a frontmost app enter full screen, and a test started from
+        // a terminal may not be allowed to come to the front.
+        report["enteredFullScreen"] = window.styleMask.contains(.fullScreen)
+        report["navigatorFullScreen"] = rows()
+        report["frameFullScreen"] = "\(window.frame)"
+        snapshot("fullscreen")
+        report["windowsFullScreen"] = NSApp.windows.map {
+            "\(type(of: $0)) visible=\($0.isVisible) alpha=\($0.alphaValue) level=\($0.level.rawValue) frame=\($0.frame)"
+        }
+        let options = NSApp.currentSystemPresentationOptions
+        report["autoHideToolbar"] = options.contains(.autoHideToolbar)
+        report["autoHideMenuBar"] = options.contains(.autoHideMenuBar)
+        report["fullScreenToolbarFrame"] = NSApp.windows.first { String(describing: type(of: $0)).contains("ToolbarFullScreen") }.map { "\($0.frame) visible=\($0.isVisible)" } ?? "none"
+        report["mainContentLayoutRect"] = "\(window.contentLayoutRect)"
+        report["toolbarVisible"] = window.toolbar?.isVisible ?? false
+        report["toolbarItems"] = window.toolbar?.items.count ?? -1
+        // In full screen the toolbar lives in its own window; capture that one too (only Stet's own windows).
+        if let folder, let toolbarWindow = NSApp.windows.first(where: { String(describing: type(of: $0)).contains("ToolbarFullScreen") }),
+           let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(toolbarWindow.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
+        {
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("fullscreen-toolbar.png"))
+        }
+        if window.styleMask.contains(.fullScreen) {
+            window.toggleFullScreen(nil)
+            try? await Task.sleep(for: .seconds(2))
+        }
+        snapshot("after")
+        await model.closeBook()
         finish(report, failures: failures)
     }
 

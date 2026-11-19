@@ -21,9 +21,9 @@ struct BookView: View {
                         ComparisonView(session: session, comparison: comparison)
                     }
                 }
+                .overlay(alignment: .top) { ToastView(session: session) }
                 StatusBar(session: session, editor: editor)
             }
-            .overlay(alignment: .top) { ToastView(session: session) }
         }
         .inspector(isPresented: $showInspector) {
             InspectorView(session: session, tab: $inspectorTab)
@@ -142,12 +142,12 @@ struct Banners: View {
     var body: some View {
         VStack(spacing: 0) {
             if let adoption = session.adoption, session.sheet == nil {
-                Banner(symbol: "arrow.triangle.merge", text: "Die Übernahme von „\(adoption.name)“ ist noch nicht abgeschlossen.", tint: .purple) {
+                Banner(symbol: "arrow.triangle.merge", text: "Übernahme von „\(adoption.name)“ noch offen", tint: .purple) {
                     Button("Fortsetzen …") { session.sheet = .conflicts }
                     Button("Abbrechen") { Task { await session.cancelAdoption() } }
                 }
             } else if session.isOnExperiment, let experiment = session.currentExperiment {
-                Banner(symbol: "flask", text: "Experiment „\(experiment.name)“ – was du hier schreibst, ändert die Hauptfassung nicht.", tint: .purple) {
+                Banner(symbol: "flask", text: "Experiment „\(experiment.name)“", detail: "– was du hier schreibst, ändert die Hauptfassung nicht.", tint: .purple) {
                     Button("Übernehmen …") { session.sheet = .adopt(experiment) }
                     Button("Zur Hauptfassung") { Task { await session.switchTo(session.mainBranch) } }
                 }
@@ -155,9 +155,11 @@ struct Banners: View {
             if let finding = session.syncFinding {
                 Banner(
                     symbol: "exclamationmark.icloud",
-                    text: "Dieses Buch liegt in einem \(finding.service)-Ordner. Stet speichert die Historie selbst – ein Sync-Dienst kann sie beschädigen, wenn zwei Geräte gleichzeitig schreiben."
+                    text: "Dieses Buch liegt in einem \(finding.service)-Ordner.",
+                    detail: "Stet speichert die Historie selbst – ein Sync-Dienst kann sie beschädigen, wenn zwei Geräte gleichzeitig schreiben."
                 ) {
-                    Button("In einen anderen Ordner verschieben …") { AppModel.shared.moveCurrentBook() }
+                    Button("Verschieben …") { AppModel.shared.moveCurrentBook() }
+                        .help("In einen Ordner verschieben, den kein Sync-Dienst verwaltet")
                     Button("Hier lassen") { session.keepInSyncedFolder() }
                 }
             }
@@ -184,15 +186,28 @@ struct Banners: View {
 struct Banner<Actions: View>: View {
     let symbol: String
     let text: String
+    /// Shown after the text when there is room (and always in the tooltip).
+    var detail: String? = nil
     var tint: Color = .orange
     @ViewBuilder let actions: Actions
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        // The text is limited to two lines on purpose. Unlimited wrapping made SwiftUI measure it at
+        // the narrowest possible width, word by word, which raised the window's minimum height above
+        // the screen height: no full screen, and a zoomed window that cut off the navigator.
+        HStack(alignment: .center, spacing: 10) {
             Image(systemName: symbol).foregroundStyle(tint)
-            Text(text).fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                if let detail {
+                    Text(text + " " + detail).lineLimit(1)
+                }
+                Text(text).lineLimit(2).truncationMode(.middle)
+            }
+            .layoutPriority(1)
+            .help([text, detail].compactMap { $0 }.joined(separator: " "))
             Spacer(minLength: 12)
-            actions
+            HStack(spacing: 8) { actions }
+                .fixedSize()
         }
         .font(.callout)
         .padding(.horizontal, 14)
