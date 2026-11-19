@@ -115,6 +115,13 @@ final class BookTests: TempDirTestCase {
         XCTAssertEqual(texts, ["Eins. Zwei. Drei.", "Eins. Zwei.", "Eins.", ""])
     }
 
+    func testBookIsMarkedAsPackageEvenWithoutTheType() async throws {
+        // An extension macOS doesn't know, so only the bundle bit can make it a package.
+        let url = temp.appendingPathComponent("Unbekannt.stetbook")
+        _ = try await Book.create(at: url, title: "T", author: "A")
+        XCTAssertEqual(try url.resourceValues(forKeys: [.isPackageKey]).isPackage, true)
+    }
+
     func testIntegrityOfFreshBook() async throws {
         let book = try await makeBook()
         let report = await HealthCheck.run(book)

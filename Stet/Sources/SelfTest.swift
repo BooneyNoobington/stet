@@ -11,13 +11,29 @@ import StetCore
 ///                                       structure, health. The temporary book is deleted afterwards;
 ///                                       <folder> is only read.
 enum SelfTest {
+    /// True while a self-test runs; its temporary books stay out of "recently opened".
+    private(set) static var isRunning = false
+
     static func startIfRequested() {
         let args = CommandLine.arguments
+        isRunning = args.contains("--selftest") || args.contains("--selftest-book")
         if args.contains("--selftest") {
             armWatchdog()
             Task { @MainActor in
                 await AppModel.shared.editor.waitUntilReady()
                 await runBridge(editor: AppModel.shared.editor)
+            }
+        } else if let flag = args.firstIndex(of: "--preview-html"), args.indices.contains(flag + 2) {
+            // Writes the Quick Look preview page of a book to a file (for checking it in a browser).
+            let book = URL(fileURLWithPath: args[flag + 1])
+            do {
+                let summary = try BookSummary.read(book)
+                let html = BookPreviewHTML.render(summary, coverSource: summary.coverURL?.absoluteString)
+                try Data(html.utf8).write(to: URL(fileURLWithPath: args[flag + 2]))
+                exit(0)
+            } catch {
+                print(error.localizedDescription)
+                exit(1)
             }
         } else if let flag = args.firstIndex(of: "--selftest-book"), args.indices.contains(flag + 1) {
             armWatchdog(seconds: 120)

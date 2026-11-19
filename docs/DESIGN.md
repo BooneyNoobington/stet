@@ -58,6 +58,12 @@ Der Leuchtturm.stet/
 └── .git/
 ```
 
+**Finder integration.**
+- **Bundle bit.** Stet sets it on every book it creates, imports or opens, so the book shows as a single file even on Macs without Stet. Finder copies, AirDrop and Time Machine keep it; git and sync services don't.
+- **Thumbnail extension.** Finder shows the book's cover as its icon, or a drawn title page (title and author) when there is no cover.
+- **Preview extension.** The space bar shows the title, author, contents with word counts and the opening of the book.
+- **Icons.** The app and document icons use the proofreader's stet mark: dots under a word. They are drawn in code (`Stet/Shared/StetArtwork.swift`, rendered by `scripts/make-icons.sh`).
+
 ### 4.1 `manuscript.yaml`
 
 ```yaml

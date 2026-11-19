@@ -48,6 +48,7 @@ final class AppModel: ObservableObject {
     }
 
     private func remember(_ url: URL) {
+        guard !SelfTest.isRunning else { return }
         recentBooks.removeAll { $0.standardizedFileURL == url.standardizedFileURL }
         recentBooks.insert(url, at: 0)
         recentBooks = Array(recentBooks.prefix(8))

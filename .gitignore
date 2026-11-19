@@ -7,3 +7,5 @@ build/
 StetCore/.build/
 Stet.xcodeproj/
 Stet/Info.plist
+Stet/QuickLook*/Info.plist
+Stet/QuickLook*/*.entitlements

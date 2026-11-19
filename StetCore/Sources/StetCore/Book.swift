@@ -39,6 +39,17 @@ public final class Book {
         self.git = Git(directory: url)
         self.manifest = try Manifest.parse(yaml)
         self.writtenManifestYAML = yaml
+        Self.markAsPackage(url)
+    }
+
+    /// Sets the Finder "bundle bit", so the book shows as a single file even on Macs where
+    /// Stet (and with it the `.stet` type) isn't installed. It lives in an extended attribute:
+    /// Finder copies, AirDrop and Time Machine keep it; git and most sync services don't.
+    public static func markAsPackage(_ url: URL) {
+        var target = url
+        var values = URLResourceValues()
+        values.isPackage = true
+        try? target.setResourceValues(values)
     }
 
     /// Creates a new book with one chapter and one empty scene, and makes the first version.
