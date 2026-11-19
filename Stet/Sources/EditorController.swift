@@ -2,8 +2,8 @@ import AppKit
 import WebKit
 
 /// Display settings for the writing pane (mirrors `EditorSettings` in editor/src/settings.ts).
-struct EditorSettings: Equatable {
-    enum Font: String, CaseIterable, Identifiable {
+struct EditorSettings: Equatable, Codable {
+    enum Font: String, CaseIterable, Identifiable, Codable {
         case serif, sans, mono
         var id: String { rawValue }
         var label: String {
@@ -15,7 +15,7 @@ struct EditorSettings: Equatable {
         }
     }
 
-    enum Quotes: String, CaseIterable, Identifiable {
+    enum Quotes: String, CaseIterable, Identifiable, Codable {
         case de, guillemets, en
         var id: String { rawValue }
         var label: String {
@@ -35,6 +35,26 @@ struct EditorSettings: Equatable {
     var language = "de"
     var showComments = true
     var focusMode = false
+
+    private static let defaultsKey = "EditorSettings"
+
+    /// Display settings are per device, not per book.
+    static func load() -> EditorSettings {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
+              let settings = try? JSONDecoder().decode(EditorSettings.self, from: data)
+        else { return EditorSettings() }
+        return settings
+    }
+
+    func save() {
+        if let data = try? JSONEncoder().encode(self) {
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    static func quotes(forLanguage language: String) -> Quotes {
+        language.lowercased().hasPrefix("en") ? .en : .de
+    }
 
     var dictionary: [String: Any] {
         [
@@ -58,9 +78,12 @@ final class EditorController: NSObject, ObservableObject {
     @Published private(set) var isReady = false
     @Published private(set) var words = 0
     @Published private(set) var characters = 0
-    @Published var settings = EditorSettings()
+    @Published var settings = EditorSettings.load() {
+        didSet { settings.save() }
+    }
 
     let webView: WKWebView
+    private var readyWaiters: [CheckedContinuation<Void, Never>] = []
 
     var onReady: (() -> Void)?
     var onChange: (() -> Void)?
@@ -84,6 +107,11 @@ final class EditorController: NSObject, ObservableObject {
         webView.loadFileURL(index, allowingReadAccessTo: index.deletingLastPathComponent())
     }
 
+    func waitUntilReady() async {
+        if isReady { return }
+        await withCheckedContinuation { readyWaiters.append($0) }
+    }
+
     // MARK: Swift → JS
 
     @discardableResult
@@ -100,6 +128,11 @@ final class EditorController: NSObject, ObservableObject {
             throw BridgeError.unexpectedResult("getText")
         }
         return text
+    }
+
+    /// Replaces the whole text as one undoable edit.
+    func replaceText(_ text: String) async throws {
+        try await call("window.stet.replaceText(text); return true", ["text": text])
     }
 
     func applySettings() async {
@@ -131,6 +164,8 @@ extension EditorController: WKScriptMessageHandler {
         switch type {
         case "ready":
             isReady = true
+            readyWaiters.forEach { $0.resume() }
+            readyWaiters.removeAll()
             onReady?()
         case "changed":
             onChange?()

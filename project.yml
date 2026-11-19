@@ -1,0 +1,75 @@
+# XcodeGen spec. Generate the Xcode project with `xcodegen` (scripts/build.sh does it for you).
+name: Stet
+options:
+  bundleIdPrefix: local.stet
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+packages:
+  StetCore:
+    path: StetCore
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  Stet:
+    type: application
+    platform: macOS
+    sources:
+      - path: Stet/Sources
+    dependencies:
+      - package: StetCore
+    info:
+      path: Stet/Info.plist
+      properties:
+        CFBundleDisplayName: Stet
+        CFBundleShortVersionString: "0.2"
+        CFBundleVersion: "1"
+        CFBundleDevelopmentRegion: de
+        LSApplicationCategoryType: public.app-category.productivity
+        LSMinimumSystemVersion: "14.0"
+        NSPrincipalClass: NSApplication
+        # .stet books are folders that Finder shows as single files (like .app).
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: local.stet.book
+            UTTypeDescription: Stet-Buch
+            UTTypeConformsTo: [com.apple.package, public.composite-content]
+            UTTypeTagSpecification:
+              public.filename-extension: [stet]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Stet-Buch
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSTypeIsPackage: true
+            LSItemContentTypes: [local.stet.book]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: local.stet.Stet
+        PRODUCT_NAME: Stet
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        COMBINE_HIDPI_IMAGES: YES
+    preBuildScripts:
+      - name: Build editor
+        basedOnDependencyAnalysis: false
+        script: |
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          cd "$SRCROOT/editor"
+          [ -d node_modules ] || npm install --no-audit --no-fund
+          npm run --silent build
+    postBuildScripts:
+      - name: Copy editor into the app
+        basedOnDependencyAnalysis: false
+        script: |
+          mkdir -p "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/editor"
+          rsync -a --delete "$SRCROOT/editor/dist/" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/editor/"
+    scheme:
+      gatherCoverageData: false

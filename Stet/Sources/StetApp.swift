@@ -1,0 +1,101 @@
+import AppKit
+import StetCore
+import SwiftUI
+
+@main
+struct StetApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var model = AppModel.shared
+
+    var body: some Scene {
+        Window("Stet", id: "main") {
+            RootView(model: model, editor: model.editor)
+        }
+        .defaultSize(width: 1180, height: 800)
+        .commands { StetCommands(model: model, editor: model.editor) }
+    }
+}
+
+struct StetCommands: Commands {
+    @ObservedObject var model: AppModel
+    @ObservedObject var editor: EditorController
+
+    var body: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Neues Buch …") { model.showNewBookPanel() }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+            Button("Buch öffnen …") { model.showOpenPanel() }
+                .keyboardShortcut("o")
+            Menu("Zuletzt geöffnet") {
+                ForEach(model.recentBooks, id: \.self) { url in
+                    Button(url.deletingPathExtension().lastPathComponent) { Task { await model.open(url) } }
+                }
+            }
+            .disabled(model.recentBooks.isEmpty)
+            Divider()
+            Button("Ordner importieren …") { model.showImportPanel() }
+            Divider()
+            Button("Buch schließen") { Task { await model.closeBook() } }
+                .disabled(model.session == nil)
+        }
+        CommandGroup(replacing: .saveItem) {
+            Button("Version sichern") { Task { await model.session?.saveVersion() } }
+                .keyboardShortcut("s")
+                .disabled(model.session == nil)
+        }
+        CommandMenu("Buch") {
+            Button("Neue Szene") { model.session?.addScene(after: model.session?.selectedSceneID) }
+                .keyboardShortcut("n")
+                .disabled(model.session == nil)
+            Button("Neues Kapitel") {
+                let chapter = model.session?.selectedSceneID.flatMap { model.session?.manifest.chapter(containing: $0)?.id }
+                model.session?.addChapter(after: chapter)
+            }
+            .keyboardShortcut("n", modifiers: [.command, .option])
+            .disabled(model.session == nil)
+        }
+        CommandGroup(after: .toolbar) {
+            Picker("Schrift", selection: $editor.settings.font) {
+                ForEach(EditorSettings.Font.allCases) { Text($0.label).tag($0) }
+            }
+            Button("Größer") { editor.settings.fontSize = min(32, editor.settings.fontSize + 1) }
+                .keyboardShortcut("+")
+            Button("Kleiner") { editor.settings.fontSize = max(12, editor.settings.fontSize - 1) }
+                .keyboardShortcut("-")
+            Picker("Anführungszeichen", selection: $editor.settings.quotes) {
+                ForEach(EditorSettings.Quotes.allCases) { Text($0.label).tag($0) }
+            }
+            Toggle("Kommentare zeigen", isOn: $editor.settings.showComments)
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+            Toggle("Fokusmodus", isOn: $editor.settings.focusMode)
+                .keyboardShortcut("f", modifiers: [.command, .option])
+            Divider()
+        }
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        SelfTest.startIfRequested()
+    }
+
+    /// Double-clicking a .stet book in Finder.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first(where: { $0.pathExtension == Book.fileExtension }) else { return }
+        Task { @MainActor in await AppModel.shared.open(url) }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// Writes the open scene to disk and takes a snapshot before quitting.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard AppModel.shared.session != nil else { return .terminateNow }
+        Task { @MainActor in
+            await AppModel.shared.closeBook()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}

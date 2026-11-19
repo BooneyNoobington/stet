@@ -63,7 +63,7 @@ Der Leuchtturm.stet/
 ```yaml
 format: 1
 title: Der Leuchtturm
-author: Jane Doe
+authors: [Jane Doe]
 language: de
 year: 2026                # defaults to the current year
 cover: assets/cover.jpg
@@ -176,7 +176,7 @@ Features:
 
 Swift pulls the text with `getText()` when saving, instead of receiving it on every keystroke.
 
-The prototype in `editor/` + `app/` exists to validate this choice before anything is built on it (see `docs/editor-spike.md`). Automated checks pass; the hands-on checklist decides.
+The prototype validated this choice (see `docs/editor-spike.md`): automated checks pass. The hands-on checklist is the final word.
 
 ## 8. Experiments, merging, milestones
 
@@ -252,6 +252,14 @@ Typst ships inside the app (small, Apache-2.0). Pandoc is a Homebrew dependency 
 - **Backup now** → zip of the whole package, history included, to a user-chosen place, plus optional rotating automatic backups.
 - Pushing to the server is the other backup. Time Machine covers packages automatically.
 
+## 12a. Import
+
+**Import folder** turns a folder of Markdown scenes into a book, leaving the source untouched:
+
+- A `book.yaml` (chapters → scene names, title, authors, language, cover, CSS) defines the structure. Without one, every `.md` file becomes a scene of one chapter. Scenes not listed go to a chapter "Nicht zugeordnet".
+- If the folder is a git repository, the book is a **clone**: the whole history is kept, and other branches (local and remote-tracking) become experiments. The conversion is one ordinary commit, and git's rename tracking lets every scene's history reach back before the import. The original remote is removed, so nothing is pushed to the old repository by accident.
+- Scene bodies stay byte-identical; titles go into front matter. Cover and CSS go to `assets/`, other Markdown files to `wiki/`, unknown files to `imported/`. Tooling that Stet replaces (`book.yaml`, build scripts, `README.md`) is removed in the conversion commit and stays in the history.
+
 ## 13. Sync and remotes
 
 If a book has a remote configured, **the remote is the source of truth.**
@@ -283,12 +291,12 @@ creative_writing_app/
 ├── docs/          design + decisions
 ├── editor/        TypeScript, CodeMirror 6 → dist/ (index.html, editor.js, editor.css)
 │                  shared by the Mac app and the future web app
-└── app/           Swift
-    ├── StetCore   (planned) package format, manifest, GitClient, export pipeline. UI-free and unit-tested
-    └── Stet       macOS app: SwiftUI shell + WKWebView hosting editor/dist
+├── StetCore/      Swift package, UI-free and unit-tested: package format, manifest, Git, history,
+│                  word diff, import, sync-location and health checks
+└── Stet/          macOS app: SwiftUI shell + WKWebView hosting editor/dist (Xcode project via XcodeGen)
 ```
 
-The current `app/` is the editor spike: a SwiftPM executable assembled into a `.app` by `scripts/build-spike.sh`. The real app moves to an Xcode project (or XcodeGen), because it needs the Info.plist type declarations, signing and Sparkle.
+The Xcode project is generated from `project.yml` by XcodeGen, so it stays reviewable as text. It declares the `.stet` type (`local.stet.book`, conforming to `com.apple.package`). The bundle identifier `local.stet.Stet` is a placeholder until there is a real domain for signing.
 
 ## 17. Roadmap
 

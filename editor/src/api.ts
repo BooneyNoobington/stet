@@ -22,6 +22,8 @@ export interface StressTestResult {
 export interface StetEditorAPI {
   load(text: string): { length: number };
   getText(): string;
+  /** Replaces the whole text as one undoable edit (used to restore an older version). */
+  replaceText(text: string): void;
   setSettings(patch: Partial<EditorSettings>): EditorSettings;
   getSettings(): EditorSettings;
   stats(): TextStats;

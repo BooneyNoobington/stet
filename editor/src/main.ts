@@ -144,6 +144,14 @@ const api: StetEditorAPI = {
     return { length: text.length };
   },
   getText: () => view.state.doc.toString(),
+  replaceText(text) {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: text },
+      selection: { anchor: 0 },
+      scrollIntoView: true,
+      userEvent: "input.restore",
+    });
+  },
   setSettings(patch) {
     settings = { ...settings, ...patch };
     applyCssVariables(settings);

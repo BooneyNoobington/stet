@@ -2,12 +2,12 @@
 
 **Question:** can a CodeMirror 6 writing pane inside a SwiftUI app feel native enough for Stet, while keeping the file exactly as typed?
 
-**Status:** built, and the automated checks pass. The hands-on checklist below is still open. It decides go / no-go.
+**Status:** built, and the automated checks pass. The hands-on checklist below is still open. It decides go / no-go. The spike has since grown into the real app (Phase 1); the editor is the same.
 
 ## Run it
 
 ```bash
-./scripts/build-spike.sh
+./scripts/build.sh
 ```
 
 ```bash
@@ -38,10 +38,7 @@ To debug the editor inside the app, use Safari ▸ Develop ▸ *your Mac* ▸ St
 | Focus mode | dims every paragraph except the current one, with typewriter scrolling |
 | Theming | font (Serif/Sans/Mono), size, quote style. Light/dark follows the system |
 | Shortcuts | ⌘B bold, ⌘I italic, ⌥⌘M comment (on the selection, if any), ⌥⌘T TODO |
-| Files | ⌘O opens a `.md`, ⌘S saves (the first time asks where), autosave 2 s after the last change once the file has a location |
-| Prototyp menu | reload the sample scene; stress tests with 15,000 and 60,000 words |
 
-Not in the spike: `.stet` packages, git, navigator, wiki, export, find & replace.
 
 ## Automated results (2026-11-19, Apple Silicon, macOS 27.2)
 
@@ -68,7 +65,7 @@ These can't be tested from outside. They are what "feels native" means. Note any
 - [ ] German keyboard dead keys: `^` + `e` → ê, `´` + `e` → é, `` ` `` + `a` → à
 - [ ] Press and hold a letter (accent popup: hold `a` → à á â …)
 - [ ] Dictation (press 🎤 or fn twice) inserts text at the cursor
-- [ ] Typing feels instant in the 60,000-word stress test (Prototyp menu), including at the end of the document
+- [ ] Typing feels instant in your longest scene, including at its end (the 60,000-word stress test runs in `--selftest`)
 
 **macOS text services**
 - [ ] Spelling: red underlines for German words; right-click shows suggestions; Edit ▸ Spelling and Grammar works

@@ -4,3 +4,6 @@ editor/dist/
 app/.build/
 app/.swiftpm/
 build/
+StetCore/.build/
+Stet.xcodeproj/
+Stet/Info.plist

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Locates the built editor (editor/dist): inside the .app bundle, via STET_EDITOR_DIR,
+/// Locates the built editor (editor/dist): inside the app bundle, via STET_EDITOR_DIR,
 /// or, during development, relative to this source file.
 enum EditorResources {
     static var directory: URL {
@@ -10,9 +10,8 @@ enum EditorResources {
         if let bundled = Bundle.main.url(forResource: "editor", withExtension: nil) {
             return bundled
         }
-        // app/Sources/Stet/EditorResources.swift → repository root → editor/dist
+        // Stet/Sources/EditorResources.swift → repository root → editor/dist
         return URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
