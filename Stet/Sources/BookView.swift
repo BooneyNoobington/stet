@@ -102,6 +102,7 @@ struct BookView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
+        .onChange(of: editor.settings.checkSpelling) { Task { await session.checkSpellingNow() } }
         .alert("Nachweis", isPresented: Binding(get: { session.proofMessage != nil }, set: { if !$0 { session.proofMessage = nil } })) {
             Button("OK") { session.proofMessage = nil }
         } message: {

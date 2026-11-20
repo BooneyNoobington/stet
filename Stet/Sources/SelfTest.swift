@@ -262,6 +262,35 @@ enum SelfTest {
                 _ = session.createWiki(title: "Leuchtfeuer", kind: .term)
                 model.openWiki(mara?.id)
             case "export": session.sheet = .export
+            case "spelling-review":
+                // Sample text (never the manuscript).
+                try? await model.editor.replaceText("Ein ganz normaler Satzz mit Feler.\n\nDas Fensterr stand offen, und das Fensterr klapperte.\n")
+                try? await Task.sleep(for: .milliseconds(300))
+                await session.persist()
+                model.openWindowAction?(id: "spelling")
+                await session.reviewSpelling()
+                try? await Task.sleep(for: .seconds(1))
+                standalone = NSApp.windows.first { $0.isVisible && $0.title.hasPrefix("Rechtschreibung") }
+            case "spelling":
+                // Sample text (never the manuscript): mistakes in every paragraph, a wiki name, a comment.
+                _ = session.createWiki(title: "Xyzzyblub Kessler", kind: .character)
+                for name in ["Gabriela", "Andrea", "Andreas", "Hans"] { _ = session.createWiki(title: name, kind: .character) }
+                if var andrea = session.wiki.first(where: { $0.title == "Andrea" }) {
+                    andrea.notMeant = ["Andreas"]
+                    session.saveWiki(andrea)
+                }
+                await session.pushWikiTerms()
+                try? await model.editor.load("Ein ganz normaler Satzz mit Feler.\n\nHier steht Xyzzyblub und Xyzzyblubs Boot.{>>Komentar von Gisela<<}\n\nGabriela's Auto, Andreas's Laden, Andrea's Blumenladen, Andreas' Restaurant und Hansens Hut.\n")
+                report["spellingMarks"] = await session.checkSpellingNow()
+                report["hints"] = session.currentHints.map { "\($0.word) → \($0.suggestion)" }
+                report["wikiTerms"] = ((try? await model.editor.call("return [...document.querySelectorAll('.stet-wiki-term')].map(e => e.textContent)")) as? [String]) ?? []
+                window.makeFirstResponder(model.editor.webView)
+                try? await Task.sleep(for: .seconds(1))
+                snapshot("spelling")
+                report["editMenu"] = NSApp.mainMenu?.items.first { $0.submenu?.items.contains { $0.action == #selector(NSText.copy(_:)) } == true }?
+                    .submenu?.items.map { $0.title } ?? []
+                try? await Task.sleep(for: .seconds(1))
+                snapshot("spelling")
             case "settings", "signing":
                 // Example values only (never this Mac's keys or certificates on a picture).
                 let example = SigningSetup(method: .stetKey(path: "/dev/null"), label: "Stet-Schlüssel dieses Macs",
@@ -536,7 +565,15 @@ enum SelfTest {
                     if case .conflict = segment { session.choose(.experiment, for: conflict, passage: index) }
                 }
             }
+            if let open = session.adoption {
+                report["adoptionOpenBeforeFinish"] = open.openCount
+                report["adoptionConflictKinds"] = open.conflicts.map { conflict -> String in
+                    if case .text = conflict.kind { return "text \(conflict.path)" }
+                    return "\(conflict.kind)".prefix(60).description + " " + conflict.path
+                }
+            }
             await session.finishAdoption()
+            if session.adoption != nil { report["adoptionError"] = String((session.errorMessage ?? "none").prefix(200)) }
             check(session.adoption == nil, "adoptionFinished")
             let adopted = (try? await editor.text()) ?? ""
             check(adopted.contains("(Experiment)") && !adopted.contains("(Hauptfassung)"), "decisionApplied")
@@ -674,8 +711,8 @@ enum SelfTest {
         if let other = candidates.dropFirst(5).first {
             await editor.select(from: other.range.location, to: other.range.location + other.range.length)
             let onSelection = await rightClick(".cm-content")
-            let title = onSelection.items.first?.title ?? ""
-            check(title.hasSuffix("ins Wiki aufnehmen") || title.hasSuffix("im Wiki öffnen"), "rightClickOnSelection")
+            // (A name the dictionary doesn't know gets spelling suggestions first.)
+            check(onSelection.items.contains { $0.title.hasSuffix("ins Wiki aufnehmen") || $0.title.hasSuffix("im Wiki öffnen") }, "rightClickOnSelection")
         }
         let add = session.contextMenuItems(text: "Selbsttest-Ort,", wikiID: nil)
         check(add.first?.title == "„Selbsttest-Ort“ ins Wiki aufnehmen" && add.first?.submenu?.items.count == 4, "contextMenuOffersKinds")
@@ -690,6 +727,69 @@ enum SelfTest {
         check(session.sceneFacts[first]?.contains(Fact("Datum", "14.3.1953")) == true, "sceneFactForNavigator")
         await session.saveVersion()
         check(((try? await book.git.log(limit: 1).first)?.subject.contains("Wiki")) == true, "wikiInVersion")
+
+        // Spelling (only counts are reported, never words of the manuscript).
+        await editFirstParagraph(" Fensterr Zwurbelmannn")
+        let marks = await session.checkSpellingNow()
+        check(marks >= 2, "spellingMarksShown")
+        let editorText = (try? await editor.text()) ?? ""
+        if let typo = (editorText as NSString).range(of: "Fensterr").nonEmpty {
+            let items = session.spellingMenuItems(word: "Fensterr", range: typo)
+            check(items.contains { $0.title == "„Fensterr“ für dieses Buch erlauben" }, "spellingMenuOffersAllow")
+            check(items.first?.isEnabled == true && items.first?.title != "Keine Vorschläge", "spellingMenuHasSuggestions")
+        }
+        if let name = session.wiki.first(where: { $0.kind == .character }) {
+            check(session.spelling?.isMisspelled(name.title) == false, "wikiNamesCountAsRight")
+        }
+        await session.reviewSpelling()
+        report["spellingUnknownWords"] = session.spellingIssues.count
+        if let typo = session.spellingIssues.first(where: { $0.word == "Fensterr" }),
+           let guess = session.spelling?.guesses(for: typo.word).first
+        {
+            await session.replaceEverywhere(typo, with: guess)
+            let after = (try? await editor.text()) ?? ""
+            check(!after.contains("Fensterr") && after.contains(guess), "spellingReplacedEverywhere")
+        } else {
+            check(false, "spellingReviewFindsTypo")
+        }
+        session.allowWord("Zwurbelmannn")
+        check(session.manifest.words?.contains("Zwurbelmannn") == true && !session.spellingIssues.contains { $0.word == "Zwurbelmannn" }, "spellingWordAllowedForBook")
+        check(session.spelling?.isMisspelled("Zwurbelmannn") == false, "allowedWordCountsAsRight")
+        await session.saveVersion()
+
+        // German genitives: -ens, "not meant", the possessive apostrophe (invented names).
+        _ = session.createWiki(title: "Zorbaline", kind: .character)
+        _ = session.createWiki(title: "Pelux", kind: .character)
+        if var velina = session.createWiki(title: "Velina", kind: .character) {
+            velina.notMeant = ["Velinas"]
+            session.saveWiki(velina)
+        }
+        await session.pushWikiTerms()
+        await editFirstParagraph(" Zorbaline's Auto, Peluxens Hut, Velinas Boot.")
+        await session.checkSpellingNow()
+        let hint = session.currentHints.first { $0.word == "Zorbaline's" }
+        check(hint?.suggestion == "Zorbalines", "apostropheHint")
+        if let hint {
+            check(session.hintMenuItems(at: NSRange(location: hint.range.location + 2, length: 0)).first?.title == "Zorbalines", "apostropheHintInMenu")
+        }
+        check(session.spelling?.isMisspelled("Peluxens") == false, "ensGenitiveSpelledRight")
+        try? await Task.sleep(for: .milliseconds(300))
+        let underlined = ((try? await editor.call("return [...document.querySelectorAll('.stet-wiki-term')].map(e => e.textContent)")) as? [String]) ?? []
+        check(underlined.contains("Peluxens") && underlined.contains("Zorbaline's"), "ensGenitiveRecognised")
+        check(!underlined.contains("Velinas"), "notMeantNotUnderlined")
+
+        // Taking the wiki along: from another book into this one.
+        if let other = try? await Book.create(at: work.appendingPathComponent("Band 2.stet"), title: "Band 2", author: "Test") {
+            _ = try? other.createWiki(title: "Selbsttest-Fortsetzung", kind: .place)
+            if let existing = session.wiki.first { _ = try? other.createWiki(title: existing.title, kind: existing.kind) }
+            let before = session.wiki.count
+            let imported = session.importWiki(from: other.url)
+            check(imported?.added == ["Selbsttest-Fortsetzung"] && imported?.skipped.count == 1 && session.wiki.count == before + 1, "wikiImportedFromOtherBook")
+            session.wikiNotice = nil
+            let archive = work.appendingPathComponent("Wiki.zip")
+            check((try? book.exportWiki(to: archive)) != nil && ((try? Book.wikiEntries(at: archive))?.count ?? 0) == session.wiki.count, "wikiExported")
+            await session.saveVersion()
+        }
 
         // Backups: automatic (once a day), by hand, restore.
         var backupSettings = session.backupSettings
@@ -859,4 +959,9 @@ enum SelfTest {
 
         finish(report, failures: failures)
     }
+}
+
+private extension NSRange {
+    /// nil for "not found".
+    var nonEmpty: NSRange? { location == NSNotFound || length == 0 ? nil : self }
 }

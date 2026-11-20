@@ -19,6 +19,11 @@ struct StetApp: App {
         }
         .defaultSize(width: 860, height: 620)
 
+        Window("Rechtschreibung", id: "spelling") {
+            SpellingWindow(model: model)
+        }
+        .defaultSize(width: 760, height: 560)
+
         Settings {
             StetSettingsView()
         }
@@ -74,6 +79,20 @@ struct StetCommands: Commands {
                 }
             }
             .keyboardShortcut("w", modifiers: [.command, .control])
+            .disabled(model.session == nil)
+            Button("Wiki aus anderem Buch übernehmen …") {
+                model.openWiki()
+                model.session?.chooseWikiToImport()
+            }
+            .disabled(model.session == nil)
+            Button("Wiki exportieren …") { model.session?.exportWiki() }
+                .disabled(model.session?.wiki.isEmpty != false)
+            Divider()
+            Button("Rechtschreibung prüfen …") {
+                model.openWindowAction?(id: "spelling")
+                Task { await model.session?.reviewSpelling() }
+            }
+            .keyboardShortcut(";", modifiers: [.command, .shift])
             .disabled(model.session == nil)
             Divider()
             Button("Mit dem Server abgleichen") { Task { await model.session?.syncNow() } }
@@ -138,6 +157,7 @@ struct StetCommands: Commands {
             Toggle("Fokusmodus", isOn: $editor.settings.focusMode)
                 .keyboardShortcut("f", modifiers: [.command, .option])
             Toggle("Wiki-Namen unterstreichen", isOn: $editor.settings.showWikiTerms)
+            Toggle("Rechtschreibfehler markieren", isOn: $editor.settings.checkSpelling)
             Divider()
         }
     }

@@ -1,3 +1,4 @@
+import type { Misspelling } from "./spelling";
 import type { EditorSettings } from "./settings";
 import type { TextStats } from "./stats";
 import type { WikiTerm } from "./wiki";
@@ -11,7 +12,7 @@ export type HostMessage =
   | { type: "openWiki"; id: string }
   /** Sent on right-click, before the native menu opens: the selection (or the word under the
    *  mouse) and the wiki entry under the mouse, if any. */
-  | { type: "contextMenu"; text: string; wikiId: string | null };
+  | { type: "contextMenu"; text: string; wikiId: string | null; from: number; to: number };
 
 export interface StressTestResult {
   words: number;
@@ -41,6 +42,8 @@ export interface StetEditorAPI {
   setWikiTerms(terms: WikiTerm[]): void;
   /** The selected text (main selection). */
   selectedText(): string;
+  /** Red wavy lines under these words (offsets checked against the words); returns how many show. */
+  setMisspellings(list: Misspelling[]): number;
   setSettings(patch: Partial<EditorSettings>): EditorSettings;
   getSettings(): EditorSettings;
   stats(): TextStats;

@@ -42,6 +42,9 @@ final class BookSession: ObservableObject {
     @Published var stetKey: SSHKey?
     @Published var syncState: SyncState = .off
     var syncTask: Task<Void, Never>?
+    /// While git changes the files (adopting, switching, merging, pulling), the editor must not
+    /// write its (older) text over them.
+    var isChangingFiles = false
 
     // Notes and feedback (see BookSession+Feedback.swift)
     @Published var notes: [NoteItem] = []
@@ -58,6 +61,17 @@ final class BookSession: ObservableObject {
     @Published var stampProblem: String?
     @Published var signingProblem: String?
     @Published var proofMessage: String?
+    // Spelling
+    var spelling: SpellingChecker?
+    var spellCheckTask: Task<Void, Never>?
+    /// "Ignorieren": words left alone until the book is closed.
+    var ignoredWords: Set<String> = []
+    @Published var spellingIssues: [SpellingIssue] = []
+    /// Apostrophe hints in the open scene (for the right-click menu).
+    var currentHints: [SpellingHint] = []
+    @Published var isReviewingSpelling = false
+    @Published var spellingReviewed: Date?
+    @Published var wikiNotice: String?
 
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
@@ -98,7 +112,8 @@ final class BookSession: ObservableObject {
         editor.onChange = { [weak self] in self?.editorChanged() }
         editor.onActivity = { [weak self] in self?.activeMinutes.insert(Int(Date().timeIntervalSince1970 / 60)) }
         editor.onOpenWiki = { id in AppModel.shared.openWiki(id) }
-        editor.contextMenuProvider = { [weak self] text, wikiID in self?.contextMenuItems(text: text, wikiID: wikiID) ?? [] }
+        editor.contextMenuProvider = { [weak self] text, range, wikiID in self?.menuItems(text: text, range: range, wikiID: wikiID) ?? [] }
+        spelling = SpellingChecker(language: manifest.language)
         loadWiki()
         editor.settings.language = manifest.language
         editor.settings.quotes = EditorSettings.quotes(forLanguage: manifest.language)
@@ -143,6 +158,8 @@ final class BookSession: ObservableObject {
         editor.onActivity = nil
         editor.onOpenWiki = nil
         editor.contextMenuProvider = nil
+        spellCheckTask?.cancel()
+        spelling?.close()
         await editor.setWikiTerms([])
     }
 
@@ -186,6 +203,7 @@ final class BookSession: ObservableObject {
             currentScene = scene
             try await editor.load(scene.body)
             editor.focus()
+            scheduleSpellCheck(after: .zero)
             var state = LocalState.load(for: book)
             state.lastSceneID = id
             state.save(for: book)
@@ -198,6 +216,7 @@ final class BookSession: ObservableObject {
     private func editorChanged() {
         isWritingPending = true
         hasChangesSinceVersion = true
+        scheduleSpellCheck()
         autosaveTask?.cancel()
         autosaveTask = Task { [weak self] in
             try? await Task.sleep(for: Self.autosaveDelay)
@@ -208,6 +227,9 @@ final class BookSession: ObservableObject {
 
     /// Writes the editor's text (and metadata) of the current scene to disk, in order.
     func persist() async {
+        // This writes now; a pending autosave would only write again later, possibly in the
+        // middle of an adoption or switch.
+        autosaveTask?.cancel()
         let previous = persistChain
         let task = Task { [weak self] in
             await previous?.value
@@ -218,8 +240,9 @@ final class BookSession: ObservableObject {
     }
 
     private func writeCurrentScene() async {
-        // During an adoption the files hold merge results; the editor must not overwrite them.
-        guard adoption == nil, var scene = currentScene else { return }
+        // During an adoption the files hold merge results, and while git changes files they are
+        // newer than the editor's text: the editor must not overwrite them.
+        guard adoption == nil, !isChangingFiles, var scene = currentScene else { return }
         if isWritingPending {
             guard let text = try? await editor.text() else { return }
             scene.body = text
@@ -255,7 +278,7 @@ final class BookSession: ObservableObject {
 
     // MARK: - Structure
 
-    private func changeStructure(_ change: () throws -> Void) {
+    func changeStructure(_ change: () throws -> Void) {
         do {
             try change()
             reloadSceneInfo()

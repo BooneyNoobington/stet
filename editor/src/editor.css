@@ -18,6 +18,8 @@
   --stet-bubble-bg: #ffffff;
   --stet-bubble-border: #e7e2d8;
   --stet-todo: #b6492f;
+  --stet-misspelled: rgba(214, 48, 39, 0.75);
+  --stet-hint: rgba(40, 110, 200, 0.7);
 
   color-scheme: light dark;
 }
@@ -35,6 +37,8 @@
     --stet-bubble-bg: #252421;
     --stet-bubble-border: #3a3834;
     --stet-todo: #f08a6c;
+    --stet-misspelled: rgba(255, 105, 97, 0.8);
+    --stet-hint: rgba(110, 170, 255, 0.75);
   }
 }
 
@@ -242,4 +246,23 @@ body {
   cursor: pointer;
   font-size: 11px;
   color: var(--stet-accent);
+}
+
+/* Spelling ----------------------------------------------------------------- */
+
+.stet-misspelled {
+  text-decoration: underline wavy;
+  text-decoration-color: var(--stet-misspelled);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+
+/* Usage hints (e.g. "Gabriela's" in a German book): quieter than a spelling mistake. */
+.stet-hint {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--stet-hint);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
 }

@@ -55,6 +55,9 @@ public struct WikiEntry: Identifiable, Equatable {
     public var aliases: [String]
     public var facts: [Fact]
     public var body: String
+    /// Words that look like this name (usually with genitive s) but mean someone else, e.g. for
+    /// Andrea: "Andreas". They are not underlined or counted as this entry.
+    public var notMeant: [String] = []
 
     public var path: String { "\(Self.folder)/\(id).md" }
 
@@ -69,13 +72,15 @@ public struct WikiEntry: Identifiable, Equatable {
             .first { !$0.isEmpty } ?? ""
     }
 
-    public init(id: String, title: String, kind: WikiKind = .character, aliases: [String] = [], facts: [Fact] = [], body: String = "") {
+    public init(id: String, title: String, kind: WikiKind = .character, aliases: [String] = [], facts: [Fact] = [],
+                body: String = "", notMeant: [String] = []) {
         self.id = id
         self.title = title
         self.kind = kind
         self.aliases = aliases
         self.facts = facts
         self.body = body
+        self.notMeant = notMeant
     }
 
     static func parse(id: String, text: String) -> WikiEntry {
@@ -94,7 +99,8 @@ public struct WikiEntry: Identifiable, Equatable {
                 guard let key = pair.key.string, let value = pair.value.string else { return nil }
                 return Fact(key, value)
             } ?? [],
-            body: body
+            body: body,
+            notMeant: map["notMeant"]?.sequence?.compactMap(\.string) ?? []
         )
     }
 
@@ -105,6 +111,8 @@ public struct WikiEntry: Identifiable, Equatable {
         if !cleanAliases.isEmpty { pairs.append(("aliases", Node(cleanAliases.map(str)))) }
         let cleanFacts = facts.filter { !$0.key.isEmpty && !$0.value.isEmpty }
         if !cleanFacts.isEmpty { pairs.append(("facts", Node(cleanFacts.map { (str($0.key), str($0.value)) }))) }
+        let cleanNotMeant = notMeant.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        if !cleanNotMeant.isEmpty { pairs.append(("notMeant", Node(cleanNotMeant.map(str)))) }
         return "---\n" + Manifest.emit(Node(pairs)) + "---\n" + body
     }
 }
@@ -119,17 +127,22 @@ public enum WikiMatcher {
         public let name: String
     }
 
+    /// The name, optionally with genitive s ("Maras"), English-style 's, or, for names ending in
+    /// s, ß, x or z, the old genitive -ens ("Hansens", "Fritzens"). "Andreas'" matches as Andreas.
+    public static let suffix = #"(?:s|’s|'s|(?<=[sßxzSXZ])ens)?"#
+
     public static func regex(for names: [String]) -> NSRegularExpression? {
         let unique = Array(Set(names)).sorted { $0.count > $1.count }
         guard !unique.isEmpty else { return nil }
         let alternatives = unique.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|")
-        return try? NSRegularExpression(pattern: #"(?<![\p{L}\p{N}])("# + alternatives + #")(?:s|’s|'s)?(?![\p{L}\p{N}])"#)
+        return try? NSRegularExpression(pattern: #"(?<![\p{L}\p{N}])("# + alternatives + ")" + suffix + #"(?![\p{L}\p{N}])"#)
     }
 
-    public static func matches(in text: String, regex: NSRegularExpression) -> [Match] {
+    /// `excluding`: the matched words to leave out (an entry's "not meant" words).
+    public static func matches(in text: String, regex: NSRegularExpression, excluding: Set<String> = []) -> [Match] {
         let ns = text as NSString
-        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).map {
-            Match(range: $0.range, name: ns.substring(with: $0.range(at: 1)))
+        return regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).compactMap {
+            excluding.contains(ns.substring(with: $0.range)) ? nil : Match(range: $0.range, name: ns.substring(with: $0.range(at: 1)))
         }
     }
 }
@@ -159,12 +172,13 @@ extension Book {
     }
 
     /// A new entry with a file name from its title (kept when the title changes later).
+    /// File names are compared ignoring case: the Mac's file system does, too.
     @discardableResult
     public func createWiki(title: String, kind: WikiKind) throws -> WikiEntry {
-        let existing = Set(wikiEntries().map(\.id))
+        let existing = Set(wikiEntries().map { $0.id.lowercased() })
         var id = Self.slug(title)
         var counter = 2
-        while existing.contains(id) {
+        while existing.contains(id.lowercased()) {
             id = "\(Self.slug(title))-\(counter)"
             counter += 1
         }
@@ -185,10 +199,16 @@ extension Book {
 
     /// Scenes (in reading order) where an entry's names occur, with how often.
     public func appearances(of entry: WikiEntry) -> [(sceneID: String, count: Int)] {
-        guard let regex = WikiMatcher.regex(for: entry.names) else { return [] }
+        // All names at once, so a longer name of another entry wins ("Andreas" is Andreas,
+        // not Andrea with genitive s, if both are in the wiki).
+        let all = wikiEntries()
+        guard let regex = WikiMatcher.regex(for: Array(Set(all.flatMap(\.names) + entry.names))) else { return [] }
+        let names = Set(entry.names)
+        let excluded = Set(entry.notMeant)
         return manifest.sceneIDs.compactMap { id in
             guard let scene = try? readScene(id) else { return nil }
-            let count = WikiMatcher.matches(in: TextStats.stripComments(scene.body), regex: regex).count
+            let count = WikiMatcher.matches(in: TextStats.stripComments(scene.body), regex: regex, excluding: excluded)
+                .filter { names.contains($0.name) }.count
             return count > 0 ? (id, count) : nil
         }
     }
@@ -214,5 +234,112 @@ extension Manifest {
     public var sceneFactFields: [String] {
         get { factFields ?? Self.defaultFactFields }
         set { factFields = newValue == Self.defaultFactFields ? nil : newValue }
+    }
+}
+
+// MARK: - Taking the wiki along (e.g. into a sequel)
+
+public struct WikiImport: Equatable {
+    /// Titles of the entries that were added.
+    public var added: [String] = []
+    /// Titles of entries this book already had (by one of their names); left as they are.
+    public var skipped: [String] = []
+}
+
+public enum WikiTransferError: Error, LocalizedError, Equatable {
+    case empty
+    case nothingFound(String)
+    case zipFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .empty: "Das Wiki dieses Buchs ist noch leer."
+        case .nothingFound(let name): "In „\(name)“ gibt es keine Wiki-Einträge."
+        case .zipFailed(let detail): "Das Archiv ließ sich nicht verarbeiten: \(detail)"
+        }
+    }
+}
+
+extension Book {
+    /// The whole wiki as a ZIP file: a folder "Wiki" with one Markdown file per entry, readable
+    /// in any text editor and importable into another book.
+    public func exportWiki(to destination: URL) throws {
+        let entries = wikiEntries()
+        guard !entries.isEmpty else { throw WikiTransferError.empty }
+        let fm = FileManager.default
+        let temp = fm.temporaryDirectory.appendingPathComponent("stet-wiki-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: temp) }
+        let folder = temp.appendingPathComponent("Wiki")
+        try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+        for entry in entries {
+            try Data(entry.serialized().utf8).write(to: folder.appendingPathComponent("\(entry.id).md"))
+        }
+        let archive = temp.appendingPathComponent("wiki.zip")
+        let result = try Tools.run(URL(fileURLWithPath: "/usr/bin/zip"), ["-q", "-r", "-X", archive.path, "Wiki"], in: temp)
+        guard result.status == 0 else { throw WikiTransferError.zipFailed(result.errors) }
+        if fm.fileExists(atPath: destination.path) { try fm.removeItem(at: destination) }
+        try fm.moveItem(at: archive, to: destination)
+    }
+
+    /// Entries from another book (`.stet`), an exported ZIP, or a folder of Markdown files.
+    public static func wikiEntries(at source: URL) throws -> [WikiEntry] {
+        let fm = FileManager.default
+        var isFolder: ObjCBool = false
+        guard fm.fileExists(atPath: source.path, isDirectory: &isFolder) else { throw WikiTransferError.nothingFound(source.lastPathComponent) }
+        if !isFolder.boolValue {
+            let temp = fm.temporaryDirectory.appendingPathComponent("stet-wiki-\(UUID().uuidString)")
+            defer { try? fm.removeItem(at: temp) }
+            try fm.createDirectory(at: temp, withIntermediateDirectories: true)
+            let result = try Tools.run(URL(fileURLWithPath: "/usr/bin/unzip"), ["-q", source.path, "-d", temp.path])
+            guard result.status == 0 else { throw WikiTransferError.zipFailed(result.errors) }
+            return try wikiEntries(inFolder: temp, name: source.lastPathComponent)
+        }
+        return try wikiEntries(inFolder: source, name: source.lastPathComponent)
+    }
+
+    private static func wikiEntries(inFolder folder: URL, name: String) throws -> [WikiEntry] {
+        let fm = FileManager.default
+        var candidates = [folder.appendingPathComponent(WikiEntry.folder), folder.appendingPathComponent("Wiki"), folder]
+        // An archive may hold one folder around everything.
+        let inside = ((try? fm.contentsOfDirectory(atPath: folder.path)) ?? []).filter { !$0.hasPrefix(".") && !$0.hasPrefix("__MACOSX") }
+        if inside.count == 1 { candidates.append(folder.appendingPathComponent(inside[0])) }
+        for candidate in candidates {
+            let files = ((try? fm.contentsOfDirectory(atPath: candidate.path)) ?? []).filter { $0.lowercased().hasSuffix(".md") && !$0.hasPrefix(".") }
+            guard !files.isEmpty else { continue }
+            return files.sorted().compactMap { file in
+                guard let data = fm.contents(atPath: candidate.appendingPathComponent(file).path) else { return nil }
+                return WikiEntry.parse(id: String(file.dropLast(3)), text: String(decoding: data, as: UTF8.self))
+            }
+        }
+        throw WikiTransferError.nothingFound(name)
+    }
+
+    /// Adds the entries this book doesn't have yet (matched by any of their names, ignoring
+    /// case), with their aliases, facts and notes. Existing entries stay as they are.
+    @discardableResult
+    public func importWiki(_ entries: [WikiEntry]) throws -> WikiImport {
+        var report = WikiImport()
+        let current = wikiEntries()
+        var names = Set(current.flatMap(\.names).map { $0.lowercased() })
+        var ids = Set(current.map { $0.id.lowercased() })
+        for entry in entries {
+            if entry.names.contains(where: { names.contains($0.lowercased()) }) {
+                report.skipped.append(entry.title)
+                continue
+            }
+            let base = entry.id.isEmpty ? Self.slug(entry.title) : entry.id
+            var id = base
+            var counter = 2
+            while ids.contains(id.lowercased()) {
+                id = "\(base)-\(counter)"
+                counter += 1
+            }
+            try saveWiki(WikiEntry(id: id, title: entry.title, kind: entry.kind, aliases: entry.aliases, facts: entry.facts,
+                                   body: entry.body, notMeant: entry.notMeant))
+            ids.insert(id.lowercased())
+            names.formUnion(entry.names.map { $0.lowercased() })
+            report.added.append(entry.title)
+        }
+        return report
     }
 }

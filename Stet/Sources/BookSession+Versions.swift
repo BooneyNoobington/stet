@@ -119,7 +119,11 @@ extension BookSession {
 
     private func perform(_ work: () async throws -> Void) async {
         isBusy = true
-        defer { isBusy = false }
+        isChangingFiles = true
+        defer {
+            isBusy = false
+            isChangingFiles = false
+        }
         do {
             try await work()
         } catch {

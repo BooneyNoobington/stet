@@ -203,8 +203,16 @@ extension Book {
         var signersChanged = false
         var touchedScenes: [String] = []
 
+        var wordsChanged = false
         for path in Set(changed).sorted() {
-            if path == Manifest.fileName { structureChanged = true; continue }
+            if path == Manifest.fileName {
+                // Only the spelling word list changed? Then say so instead of "Struktur geändert".
+                let before = await git.show(Manifest.fileName, at: "HEAD").flatMap { try? Manifest.parse(String(decoding: $0, as: UTF8.self)) }
+                var comparable = manifest
+                comparable.words = before?.words
+                if let before, comparable == before { wordsChanged = true } else { structureChanged = true }
+                continue
+            }
             if path.hasPrefix(FeedbackEntry.folder + "/") { feedbackChanged = true; continue }
             if path.hasPrefix(WikiEntry.folder + "/") { wikiChanged = true; continue }
             if path.hasPrefix(Self.signersFolder + "/") { signersChanged = true; continue }
@@ -232,6 +240,7 @@ extension Book {
         if feedbackChanged { parts.append("Feedback") }
         if wikiChanged { parts.append("Wiki") }
         if signersChanged { parts.append("Signatur-Schlüssel") }
+        if wordsChanged { parts.append("Wörterbuch") }
         if parts.isEmpty { parts.append("Sonstige Änderungen") }
         if let customSubject { parts = [customSubject] }
         if delta != 0 { parts.append(Self.signed(delta) + " Wörter") }
@@ -247,7 +256,7 @@ extension Book {
         return SaveResult(commit: commit, subject: subject, wordsDelta: delta)
     }
 
-    static func list(_ titles: [String]) -> String {
+    public static func list(_ titles: [String]) -> String {
         let quoted = titles.map { "„\($0)“" }
         guard quoted.count > 3 else { return quoted.joined(separator: ", ") }
         return quoted.prefix(2).joined(separator: ", ") + " und \(quoted.count - 2) weitere"
@@ -325,5 +334,32 @@ extension Book {
         let text = String(decoding: data, as: UTF8.self)
         // Files from before the import have no front matter; parse handles both.
         return SceneFile.parse(id: "", text: text).body
+    }
+}
+
+// MARK: - Spelling word list
+
+extension Manifest {
+    /// Alphabetical, ignoring case and accents; no duplicates.
+    static func sortedWords(_ words: [String]) -> [String] {
+        var seen = Set<String>()
+        return words.filter { seen.insert($0).inserted }
+            .sorted { $0.compare($1, options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "de")) == .orderedAscending }
+    }
+}
+
+extension Book {
+    /// Adds a word to the book's spelling word list (it travels with the book).
+    public func allowWord(_ word: String) throws {
+        let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !(manifest.words ?? []).contains(trimmed) else { return }
+        try updateManifest { $0.words = Manifest.sortedWords(($0.words ?? []) + [trimmed]) }
+    }
+
+    public func disallowWord(_ word: String) throws {
+        try updateManifest { manifest in
+            let rest = (manifest.words ?? []).filter { $0 != word }
+            manifest.words = rest.isEmpty ? nil : rest
+        }
     }
 }

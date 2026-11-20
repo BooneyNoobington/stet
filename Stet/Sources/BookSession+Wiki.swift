@@ -5,6 +5,7 @@ import StetCore
 extension BookSession {
     func loadWiki() {
         wiki = book.wikiEntries()
+        refreshSpellingVocabulary()
     }
 
     /// Sends every name (titles and aliases) to the editor for underlining and fact cards.
@@ -14,6 +15,7 @@ extension BookSession {
                 [
                     "name": name, "id": entry.id, "title": entry.title, "kind": entry.kind.rawValue,
                     "facts": entry.facts.map { [$0.key, $0.value] }, "summary": entry.summary,
+                    "notMeant": entry.notMeant,
                 ] as [String: Any]
             }
         }
@@ -63,8 +65,9 @@ extension BookSession {
     /// Opens a scene and selects the first occurrence of one of the entry's names.
     func jump(to entry: WikiEntry, in sceneID: String) async {
         await select(sceneID)
-        guard let body = currentScene?.body, let regex = WikiMatcher.regex(for: entry.names),
-              let match = WikiMatcher.matches(in: body, regex: regex).first
+        let names = Set(entry.names)
+        guard let body = currentScene?.body, let regex = WikiMatcher.regex(for: wiki.flatMap(\.names) + entry.names),
+              let match = WikiMatcher.matches(in: body, regex: regex, excluding: Set(entry.notMeant)).first(where: { names.contains($0.name) })
         else { return }
         await editor.select(from: match.range.location, to: match.range.location + match.range.length)
     }
@@ -84,6 +87,65 @@ extension BookSession {
     func wikiEntry(for fact: Fact) -> WikiEntry? {
         let name = fact.linkedTitle ?? fact.value
         return wiki.first { $0.names.contains(name) }
+    }
+
+    // MARK: Taking the wiki along (e.g. into a sequel)
+
+    /// The whole wiki as a ZIP: to pass on, or to take into another book.
+    func exportWiki() {
+        guard !wiki.isEmpty else {
+            wikiNotice = "Das Wiki dieses Buchs ist noch leer."
+            return
+        }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.zip]
+        panel.nameFieldStringValue = "\(manifest.title) – Wiki.zip"
+        panel.message = "Das ganze Wiki als ZIP-Datei: zum Weitergeben oder für eine Fortsetzung (dort „Wiki übernehmen …“)."
+        panel.prompt = "Exportieren"
+        guard let window = NSApp.keyWindow else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url, let self else { return }
+            do {
+                try self.book.exportWiki(to: url)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                self.wikiNotice = error.localizedDescription
+            }
+        }
+    }
+
+    func chooseWikiToImport() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.stetBook, .zip, .folder]
+        panel.canChooseDirectories = true
+        panel.treatsFilePackagesAsDirectories = false
+        panel.message = "Woher kommt das Wiki? Ein anderes Stet-Buch (z. B. der erste Band), ein exportiertes Wiki (ZIP) oder ein Ordner mit Markdown-Dateien."
+        panel.prompt = "Übernehmen"
+        guard let window = NSApp.keyWindow else { return }
+        panel.beginSheetModal(for: window) { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.importWiki(from: url)
+        }
+    }
+
+    /// Adds the entries this book doesn't have yet; existing ones stay as they are.
+    @discardableResult
+    func importWiki(from url: URL) -> WikiImport? {
+        do {
+            let report = try book.importWiki(Book.wikiEntries(at: url))
+            if !report.added.isEmpty { hasChangesSinceVersion = true }
+            loadWiki()
+            Task { await pushWikiTerms() }
+            var text = report.added.isEmpty ? "Es kam kein neuer Eintrag dazu." : "\(report.added.count) \(report.added.count == 1 ? "Eintrag" : "Einträge") übernommen."
+            if !report.skipped.isEmpty {
+                text += "\n\nSchon vorhanden und unverändert gelassen: " + Book.list(report.skipped)
+            }
+            wikiNotice = text
+            return report
+        } catch {
+            wikiNotice = error.localizedDescription
+            return nil
+        }
     }
 
     // MARK: Right-click menu

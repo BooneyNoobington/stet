@@ -41,6 +41,14 @@ private struct WikiBrowser: View {
             .navigationSplitViewColumnWidth(min: 180, ideal: 220)
             .toolbar {
                 Menu {
+                    Button("Wiki aus anderem Buch übernehmen …") { session.chooseWikiToImport() }
+                    Button("Wiki exportieren …") { session.exportWiki() }
+                        .disabled(session.wiki.isEmpty)
+                } label: {
+                    Label("Übernehmen und exportieren", systemImage: "square.and.arrow.up.on.square")
+                }
+                .help("Das Wiki in ein anderes Buch mitnehmen, z. B. in eine Fortsetzung")
+                Menu {
                     ForEach(WikiKind.allCases) { kind in
                         Button(kind.newLabel) {
                             if let entry = session.createWiki(title: kind == .note ? "Neue Notiz" : "Neu", kind: kind) {
@@ -56,14 +64,23 @@ private struct WikiBrowser: View {
             if let id = model.wikiSelection, let entry = session.wiki.first(where: { $0.id == id }) {
                 WikiEntryEditor(session: session, model: model, entry: entry).id(entry.id)
             } else {
-                ContentUnavailableView(
-                    session.wiki.isEmpty ? "Noch kein Wiki" : "Kein Eintrag ausgewählt",
-                    systemImage: "text.book.closed",
-                    description: Text("Figuren, Orte, Begriffe: Ihre Namen werden im Text dezent unterstrichen, beim Überfahren erscheinen ihre Fakten. Tipp: Namen im Text markieren und ⌃⌘W.")
-                )
+                ContentUnavailableView {
+                    Label(session.wiki.isEmpty ? "Noch kein Wiki" : "Kein Eintrag ausgewählt", systemImage: "text.book.closed")
+                } description: {
+                    Text("Figuren, Orte, Begriffe: Ihre Namen werden im Text dezent unterstrichen, beim Überfahren erscheinen ihre Fakten. Tipp: Namen im Text markieren und ⌃⌘W, oder im Text rechtsklicken.")
+                } actions: {
+                    if session.wiki.isEmpty {
+                        Button("Wiki aus einem anderen Buch übernehmen …") { session.chooseWikiToImport() }
+                    }
+                }
             }
         }
         .navigationTitle("Wiki – \(session.manifest.title)")
+        .alert("Wiki", isPresented: Binding(get: { session.wikiNotice != nil }, set: { if !$0 { session.wikiNotice = nil } })) {
+            Button("OK") { session.wikiNotice = nil }
+        } message: {
+            Text(session.wikiNotice ?? "")
+        }
         .onAppear { session.loadWiki() }
     }
 
@@ -81,6 +98,7 @@ private struct WikiEntryEditor: View {
     @ObservedObject var model: AppModel
     @State private var draft: WikiEntry
     @State private var aliasText: String
+    @State private var notMeantText: String
     @State private var saveTask: Task<Void, Never>?
     @State private var confirmDelete = false
 
@@ -89,6 +107,7 @@ private struct WikiEntryEditor: View {
         self.model = model
         _draft = State(initialValue: entry)
         _aliasText = State(initialValue: entry.aliases.joined(separator: ", "))
+        _notMeantText = State(initialValue: entry.notMeant.joined(separator: ", "))
     }
 
     var body: some View {
@@ -100,7 +119,9 @@ private struct WikiEntryEditor: View {
                     ForEach(WikiKind.allCases) { Text($0.label).tag($0) }
                 }
                 TextField("Andere Namen", text: $aliasText, prompt: Text("z. B. Mara, die Kapitänin"))
-                    .help("Durch Kommas getrennt. Alle Namen werden im Text erkannt, auch mit Genitiv-s („Maras“).")
+                    .help("Durch Kommas getrennt. Alle Namen werden im Text erkannt, auch mit Genitiv-s („Maras“), Apostroph („Andreas’“) oder -ens („Hansens“).")
+                TextField("Nicht gemeint", text: $notMeantText, prompt: Text("z. B. bei Andrea: Andreas"))
+                    .help("Wörter, die wie dieser Name aussehen, aber jemand anderen meinen – etwa „Andreas“, wenn es neben Andrea auch einen Andreas gibt, der (noch) keinen eigenen Eintrag hat. Durch Kommas getrennt.")
             }
             Section {
                 ForEach($draft.facts) { $fact in
@@ -155,6 +176,9 @@ private struct WikiEntryEditor: View {
         .onChange(of: draft) { scheduleSave() }
         .onChange(of: aliasText) {
             draft.aliases = aliasText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        .onChange(of: notMeantText) {
+            draft.notMeant = notMeantText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
         .onDisappear { saveNow() }
         .confirmationDialog("„\(draft.title)“ löschen?", isPresented: $confirmDelete) {

@@ -58,7 +58,11 @@ extension BookSession {
     private func runSync(integrate: Bool) async {
         guard isConnected, adoption == nil, syncState != .syncing else { return }
         syncState = .syncing
-        if integrate { await persist() }
+        if integrate {
+            await persist()
+            isChangingFiles = true
+        }
+        defer { isChangingFiles = false }
         do {
             let result = try await book.sync(device: DeviceID.current, integrate: integrate)
             if result.changedFiles { await reloadAfterVersionChange() } else { await refreshVersions() }
@@ -92,6 +96,8 @@ extension BookSession {
     /// Connects and syncs. Returns an error message, or nil on success.
     func connectServer(_ url: String) async -> String? {
         await persist()
+        isChangingFiles = true
+        defer { isChangingFiles = false }
         do {
             let result = try await book.connect(to: url, device: DeviceID.current)
             serverURL = await book.remoteURL()

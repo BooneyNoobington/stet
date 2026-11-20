@@ -14,6 +14,7 @@ import { type TextStats, textStats } from "./stats";
 import { proseHighlight, stetTheme } from "./theme";
 import { typography } from "./typography";
 import { setWikiTerms, type WikiTerm, wikiExtensions, wikiField, wikiState } from "./wiki";
+import { misspellingField, setMisspellings } from "./spelling";
 
 // ---------------------------------------------------------------------------
 // Host bridge
@@ -99,14 +100,17 @@ function extensions(): Extension[] {
       contextmenu(event, view) {
         const wikiId = (event.target as HTMLElement).closest<HTMLElement>(".stet-wiki-term")?.dataset.wiki ?? null;
         const selection = view.state.selection.main;
-        let text = view.state.sliceDoc(selection.from, selection.to);
-        if (!text.trim()) {
+        let from = selection.from;
+        let to = selection.to;
+        if (!view.state.sliceDoc(from, to).trim()) {
           const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
           const word = pos === null ? null : view.state.wordAt(pos);
-          text = word ? view.state.sliceDoc(word.from, word.to) : "";
+          from = word?.from ?? from;
+          to = word?.to ?? from;
         }
-        post({ type: "contextMenu", text: text.slice(0, 120), wikiId });
-        return false; // keep the native menu (spelling, look up, …)
+        const text = view.state.sliceDoc(from, to);
+        post({ type: "contextMenu", text: text.slice(0, 120), wikiId, from, to: Math.min(to, from + 120) });
+        return false; // keep the native menu (look up, cut/copy/paste …)
       },
     }),
     history(),
@@ -116,9 +120,13 @@ function extensions(): Extension[] {
     stetTheme,
     EditorView.lineWrapping,
     highlightActiveLine(),
+    misspellingField,
+    // Spelling is checked by the host (whole scene, the book's words, the wiki's names), not by
+    // WebKit, which only looks at the paragraph being typed in. No automatic correction: it
+    // would silently "fix" names, dialect and invented words.
     EditorView.contentAttributes.of((view) => ({
-      spellcheck: "true",
-      autocorrect: "on",
+      spellcheck: "false",
+      autocorrect: "off",
       autocapitalize: "sentences",
       lang: view.state.field(settingsField).language,
       "aria-label": "Manuskript",
@@ -211,6 +219,10 @@ const api: StetEditorAPI = {
   setWikiTerms(terms) {
     wikiTerms = terms;
     view.dispatch({ effects: setWikiTerms.of(terms) });
+  },
+  setMisspellings(list) {
+    view.dispatch({ effects: setMisspellings.of(list) });
+    return view.dom.querySelectorAll(".stet-misspelled, .stet-hint").length;
   },
   selectedText() {
     const range = view.state.selection.main;

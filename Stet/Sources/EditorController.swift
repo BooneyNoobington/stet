@@ -36,6 +36,8 @@ struct EditorSettings: Equatable, Codable {
     var showComments = true
     var focusMode = false
     var showWikiTerms = true
+    /// Red wavy lines under words macOS's dictionary doesn't know (host side, not sent to the editor).
+    var checkSpelling = true
 
     init() {}
 
@@ -52,6 +54,7 @@ struct EditorSettings: Equatable, Codable {
         showComments = try c.decodeIfPresent(Bool.self, forKey: .showComments) ?? d.showComments
         focusMode = try c.decodeIfPresent(Bool.self, forKey: .focusMode) ?? d.focusMode
         showWikiTerms = try c.decodeIfPresent(Bool.self, forKey: .showWikiTerms) ?? d.showWikiTerms
+        checkSpelling = try c.decodeIfPresent(Bool.self, forKey: .checkSpelling) ?? d.checkSpelling
     }
 
     private static let defaultsKey = "EditorSettings"
@@ -108,17 +111,34 @@ final class EditorController: NSObject, ObservableObject {
     var onChange: (() -> Void)?
     var onActivity: (() -> Void)?
     var onOpenWiki: ((String) -> Void)?
-    /// Builds extra items for the right-click menu from what was clicked (text, wiki entry id).
-    var contextMenuProvider: ((String, String?) -> [NSMenuItem])?
-    private var lastContext: (text: String, wikiID: String?, at: Date)?
+    /// Builds extra items for the right-click menu from what was clicked: the text (selection or
+    /// word under the mouse), its range, and the wiki entry if it's an underlined name.
+    var contextMenuProvider: ((String, NSRange, String?) -> [NSMenuItem])?
+    private var lastContext: (text: String, range: NSRange, wikiID: String?, at: Date)?
 
     private func contextMenuItems() -> [NSMenuItem] {
         guard let context = lastContext, Date().timeIntervalSince(context.at) < 2 else { return [] }
         lastContext = nil
-        return contextMenuProvider?(context.text, context.wikiID) ?? []
+        return contextMenuProvider?(context.text, context.range, context.wikiID) ?? []
+    }
+
+    /// WebKit's own text checking stays off: it only looks at the paragraph being typed in, so
+    /// Stet checks spelling itself (see Spelling.swift). No automatic correction (it would
+    /// silently "fix" names, dialect and invented words); quotes and dashes come from Stet's own
+    /// typography.
+    static func registerTextCheckingDefaults() {
+        UserDefaults.standard.register(defaults: [
+            "WebContinuousSpellCheckingEnabled": false,
+            "WebAutomaticSpellingCorrectionEnabled": false,
+            "WebGrammarCheckingEnabled": false,
+            "WebAutomaticQuoteSubstitutionEnabled": false,
+            "WebAutomaticDashSubstitutionEnabled": false,
+            "WebAutomaticTextReplacementEnabled": false,
+        ])
     }
 
     override init() {
+        Self.registerTextCheckingDefaults()
         let configuration = WKWebViewConfiguration()
         let contentController = WKUserContentController()
         configuration.userContentController = contentController
@@ -186,6 +206,14 @@ final class EditorController: NSObject, ObservableObject {
         _ = try? await call("window.stet.setWikiTerms(t); return true", ["t": terms])
     }
 
+    /// Red wavy lines under these words; returns how many the editor shows.
+    @discardableResult
+    func setMisspellings(_ list: [(range: NSRange, word: String)], hints: [(range: NSRange, word: String)] = []) async -> Int {
+        let items = list.map { ["from": $0.range.location, "to": $0.range.location + $0.range.length, "word": $0.word] as [String: Any] }
+            + hints.map { ["from": $0.range.location, "to": $0.range.location + $0.range.length, "word": $0.word, "kind": "hint"] as [String: Any] }
+        return ((try? await call("return window.stet.setMisspellings(l)", ["l": items])) as? NSNumber)?.intValue ?? 0
+    }
+
     func selectedText() async -> String {
         ((try? await call("return window.stet.selectedText()")) as? String) ?? ""
     }
@@ -232,7 +260,9 @@ extension EditorController: WKScriptMessageHandler {
         case "openWiki":
             if let id = body["id"] as? String { onOpenWiki?(id) }
         case "contextMenu":
-            lastContext = ((body["text"] as? String) ?? "", body["wikiId"] as? String, Date())
+            let from = (body["from"] as? NSNumber)?.intValue ?? 0
+            let to = (body["to"] as? NSNumber)?.intValue ?? from
+            lastContext = ((body["text"] as? String) ?? "", NSRange(location: from, length: max(0, to - from)), body["wikiId"] as? String, Date())
         default:
             break
         }

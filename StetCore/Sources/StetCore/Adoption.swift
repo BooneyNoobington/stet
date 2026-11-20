@@ -20,6 +20,9 @@ extension Manifest {
         result.cover = pick(base.cover, ours.cover, theirs.cover)
         result.epubCSS = pick(base.epubCSS, ours.epubCSS, theirs.epubCSS)
         result.factFields = pick(base.factFields, ours.factFields, theirs.factFields)
+        // Both sides' new words are kept (and both sides' removals).
+        let mergedWords = mergeList(base: base.words ?? [], ours: ours.words ?? [], theirs: theirs.words ?? [])
+        result.words = mergedWords.isEmpty ? nil : Manifest.sortedWords(mergedWords)
 
         func nodes(_ m: Manifest) -> [String: StructureNode] {
             Dictionary(m.structure.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -64,6 +67,8 @@ extension Manifest {
     /// What two manifests share: their common chapters (by ID) with their common scenes, in `a`'s order.
     static func commonPart(_ a: Manifest, _ b: Manifest) -> Manifest {
         var common = a
+        let bWords = Set(b.words ?? [])
+        common.words = a.words?.filter { bWords.contains($0) }
         let bChapters = Dictionary(b.chapters.map { ($0.id, Set($0.sceneIDs)) }, uniquingKeysWith: { x, _ in x })
         let bNodes = Set(b.structure.map(\.id))
         common.structure = a.structure.filter { bNodes.contains($0.id) }.map { node in

@@ -174,6 +174,11 @@ Features:
 - **Wiki terms** (§10) are underlined via alias matching.
 - **Typography**: smart quotes per book language (`„“`, `»«`, `“”`), apostrophe `’`, ` -- ` → ` – `, `...` → `…`.
 - **Focus mode**: dims everything except the current paragraph, with typewriter scrolling.
+- **Spelling** (Darstellung ▸ Rechtschreibfehler markieren, on by default): Stet checks the open scene itself with macOS's dictionaries (`NSSpellChecker`, the book's language) right after loading it and a moment after typing stops, and sends the ranges to the editor, which draws red wavy lines (they move with the text; a word being typed loses its line until the next check). WebKit's own checking is off: it only looks at the paragraph being typed in, so existing mistakes stayed invisible. No automatic correction: it would silently "fix" names, dialect and invented words. Comments (`{>>…<<}`) are not checked.
+  - Right as written: the wiki's names (also their parts, with genitive s, and with -ens for names on s, ß, x, z) and the book's word list (`words:` in `manuscript.yaml`, merged like a list so two Macs' additions add up). Both are the "ignored words" of the book's own spell document, so the system dictionary stays clean.
+  - Right-click on a marked word: up to five suggestions (bold), „für dieses Buch erlauben“, „ignorieren“ (until the book is closed); the wiki items follow.
+  - **Apostrophe hint** (German books only): a wiki name or book word with an English-style possessive gets a quieter blue dotted line and a suggestion: „Gabriela's“ → „Gabrielas“ (no apostrophe in the German genitive), „Andreas's“ → „Andreas’“ (names on s, ß, x, z take the apostrophe only). „Andrea's“ is left alone when there is also an Andreas: making the name clear is the accepted exception. „so lassen“ (or allowing the word for the book) keeps a form on purpose, e.g. a shop's name. The hints also appear in the spelling window.
+  - **Rechtschreibung prüfen …** (⇧⌘;) opens a window with every unknown word of the book, most frequent first: suggestions with „Überall ersetzen“ (the open scene changes in the editor, undoable; other scenes on disk, the old text stays in the history), allow for this book, ignore, add to the macOS dictionary, and every occurrence with context (a click opens the scene and selects the word).
 - **Theming** (local setting): font family, size, line height, column width, light/dark from the system.
 
 **Bridge** (JSON messages):
@@ -256,14 +261,17 @@ facts:
 Free-form notes …
 ```
 
-- **No markup in the prose.** The editor underlines every name (title and aliases) with a dotted line. Matching is whole words with Unicode letters, case-sensitive, longest name first, and a genitive `-s` counts ("Maras" → Mara).
+- **No markup in the prose.** The editor underlines every name (title and aliases) with a dotted line. Matching is whole words with Unicode letters, case-sensitive, longest name first. Genitives count: `-s` ("Maras" → Mara), English-style `'s`/`’s`, the apostrophe of names on s, ß, x, z ("Andreas’" → Andreas, the apostrophe stays outside), and for those names the old `-ens` ("Hansens", "Fritzens"). "Andreasstraße" or "Hansestadt" don't match.
+  - Ambiguity: "Andreas" can be the name Andreas or Andrea's genitive. With entries for both, the longer, exact name wins (also in "Kommt vor in", which matches all names at once). Without an entry for Andreas, an entry can list **Nicht gemeint** words (`notMeant:` in its front matter, e.g. Andrea: Andreas): they are neither underlined nor counted for it.
+  - Explicit links in the prose (`[[Andrea]]`, as in Obsidian) were considered and left out: they would clutter the manuscript, have to be removed from every export, and replace the automatic recognition; "Nicht gemeint" settles the rare ambiguous cases without markup.
 - **Hovering a name shows a card** with kind, quick facts (`[[…]]` shown as plain text) and the entry's first line. ⌘-click, or the card's link, opens the entry. Underlining can be switched off (Darstellung ▸ Wiki-Namen unterstreichen).
 - **Wiki window** (⌥⌘W or the toolbar): entries grouped by kind, with search. For each entry: name, kind, other names, facts, notes, and **Kommt vor in** (the scenes with a count; a click opens the scene at the first occurrence). Edits are saved after a short pause.
 - **Wiki-Eintrag aus Auswahl (⌃⌘W)**: the selected name gets an entry, or its existing entry opens.
 - **Right-click in the text**: on the selection, or on the word under the mouse, the native menu (spelling, Look Up …) gets wiki items on top: „Name“ im Wiki öffnen if an entry exists (or the name is underlined), otherwise „Name“ ins Wiki aufnehmen with a submenu for the kind (Figur, Ort, Begriff, Notiz).
 - Plain Markdown files in `wiki/` (e.g. imported notes) appear as notes, titled after the file name.
 - Versions that change the wiki say "Wiki".
-- Later: optional export as a glossary appendix.
+- **Taking the wiki along** (wiki window toolbar or Buch menu), e.g. into a sequel: **Wiki exportieren …** writes a ZIP with a folder `Wiki/`, one Markdown file per entry; **Wiki aus anderem Buch übernehmen …** reads another `.stet` book, such a ZIP, or a folder of Markdown files. Entries this book already has (by any of their names, ignoring case) stay as they are; the others come with aliases, facts and notes. File names are compared ignoring case, as the Mac's file system does.
+- Later: optional export as a readable glossary appendix.
 
 ## 11. Export
 

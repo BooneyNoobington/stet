@@ -22,6 +22,8 @@ export interface WikiTerm {
   kind: string;
   facts: [string, string][];
   summary: string;
+  /** Words that look like this name but mean someone else ("Andreas" for Andrea). */
+  notMeant?: string[];
 }
 
 interface WikiState {
@@ -39,7 +41,8 @@ export function wikiState(terms: WikiTerm[]): WikiState {
   const byName = new Map(terms.map((t) => [t.name, t]));
   const names = [...byName.keys()].sort((a, b) => b.length - a.length);
   const regex = names.length
-    ? new RegExp(`(?<![\\p{L}\\p{N}])(${names.map(escape).join("|")})(?:s|’s|'s)?(?![\\p{L}\\p{N}])`, "gu")
+    ? // Genitive s, English-style 's, and for names on s, ß, x, z the old -ens ("Hansens").
+      new RegExp(`(?<![\\p{L}\\p{N}])(${names.map(escape).join("|")})(?:s|’s|'s|(?<=[sßxzSXZ])ens)?(?![\\p{L}\\p{N}])`, "gu")
     : null;
   return { byName, regex };
 }
@@ -66,7 +69,7 @@ function find(state: WikiState, text: string, offset: number): Found[] {
   state.regex.lastIndex = 0;
   for (const match of text.matchAll(state.regex)) {
     const term = state.byName.get(match[1]);
-    if (term && match.index !== undefined) {
+    if (term && match.index !== undefined && !term.notMeant?.includes(match[0])) {
       found.push({ from: offset + match.index, to: offset + match.index + match[0].length, term });
     }
   }
