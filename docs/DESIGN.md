@@ -221,9 +221,24 @@ She {==never looked back==}{>>too cliché?<<} at the harbour.
 
 Comments are excluded from word counts and removed on export (or turned into Word comments for `.docx` review copies). The `{~~old~>new~~}` substitution syntax is avoided because `~~` collides with GFM strikethrough; Stet uses CommonMark without that extension.
 
-**Feedback inbox** (`feedback/`): one entry per piece of feedback, with `from`, `received` and `refersTo` (the milestone of the export they read, preselected automatically). Stet can paste in email text, attach a photo of a marked-up printout, or import a `.docx`. While working through an entry, the writer links a passage in it to a passage in the manuscript, and Stet inserts a `{>>@Name: …<<}` comment there.
+**Notes overview** (Inspector ▸ Notizen): every comment and TODO in the book, grouped by scene in reading order, filterable (Alle / TODOs / Kommentare). A click jumps to the passage in the editor. **Erledigt** removes a TODO or comment from the text as one undoable edit; a highlighted passage stays as plain text, and the history keeps the note. Positions are UTF-16 offsets, as CodeMirror counts them.
 
-Later: import Word comments from a returned `.docx` automatically. Pandoc reads comments together with the text they point at, and the exported version is known, so Stet can map them onto today's text.
+**Feedback inbox** (Inspector ▸ Feedback, folder `feedback/`, versioned and synced). Each entry is a Markdown file with front matter:
+- `from`, `received` (day), `refersTo` (an export mark or milestone; the newest export is preselected), `status` (open/done)
+- `attachments`: files copied to `feedback/attachments/`, e.g. a photo of a marked-up printout
+- `wordComments`: author, passage, text, placed
+
+The body holds the feedback text. In the entry:
+- Text marked in the feedback can be inserted as a comment `{>>@Name: …<<}` at the editor's cursor, or around its selection.
+- **Diese Szene mit jener Fassung vergleichen** shows what changed in the open scene since the version that was read (`Book.version(ofScene:at:)` plus the comparison view).
+- Marking an entry as done moves it to "Erledigt"; deleting removes it and its attachments (they stay in the history).
+- A version that includes feedback says "Feedback" in its message.
+
+**Word comments** ("Word-Datei …"):
+- Pandoc reads a returned `.docx` with `--track-changes=all` through a small Lua writer (`Resources/comments.lua`). It yields each comment's author, text and the commented passage; Pandoc names the id `comment-id`.
+- The passage is found in today's text by `PassageFinder`. It ignores the differences export and typing make: straight vs. typographic quotes and apostrophes, dashes, `...` vs. `…`, emphasis marks, CriticMarkup and whitespace. The match maps back to exact UTF-16 offsets.
+- **An die Stelle** wraps that passage as `{==…==}{>>@Name: …<<}`; **Alle an ihre Stelle** does this for every comment. Where a passage no longer exists, **An den Cursor** inserts the comment with the quoted passage.
+- The `.docx` itself is kept as an attachment of the entry.
 
 ## 10. Wiki
 

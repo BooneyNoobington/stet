@@ -43,6 +43,10 @@ final class BookSession: ObservableObject {
     @Published var syncState: SyncState = .off
     var syncTask: Task<Void, Never>?
 
+    // Notes and feedback (see BookSession+Feedback.swift)
+    @Published var notes: [NoteItem] = []
+    @Published var feedback: [FeedbackEntry] = []
+
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
     @Published var comparison: Comparison?

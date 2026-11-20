@@ -152,6 +152,42 @@ const api: StetEditorAPI = {
       userEvent: "input.restore",
     });
   },
+  select(from, to) {
+    const length = view.state.doc.length;
+    const anchor = Math.max(0, Math.min(from, length));
+    const head = Math.max(0, Math.min(to, length));
+    view.dispatch({
+      selection: { anchor, head },
+      effects: EditorView.scrollIntoView(anchor, { y: "center" }),
+      userEvent: "select",
+    });
+    view.focus();
+  },
+  replaceRange(from, to, text) {
+    view.dispatch({ changes: { from, to, insert: text }, userEvent: "input.replace" });
+  },
+  insertComment(comment) {
+    const range = view.state.selection.main;
+    const body = `{>>${comment}<<}`;
+    if (range.empty) {
+      view.dispatch({ changes: { from: range.head, insert: body }, selection: { anchor: range.head + body.length }, userEvent: "input" });
+    } else {
+      const passage = view.state.sliceDoc(range.from, range.to);
+      const text = `{==${passage}==}${body}`;
+      view.dispatch({ changes: { from: range.from, to: range.to, insert: text }, selection: { anchor: range.from + text.length }, userEvent: "input" });
+    }
+    view.focus();
+  },
+  commentRange(from, to, comment) {
+    const passage = view.state.sliceDoc(from, to);
+    const text = `{==${passage}==}{>>${comment}<<}`;
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor: from },
+      effects: EditorView.scrollIntoView(from, { y: "center" }),
+      userEvent: "input",
+    });
+  },
   setSettings(patch) {
     settings = { ...settings, ...patch };
     applyCssVariables(settings);

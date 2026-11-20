@@ -198,10 +198,12 @@ extension Book {
         var edited: [String] = [], added: [String] = [], removed: [String] = []
         var delta = 0
         var structureChanged = false
+        var feedbackChanged = false
         var touchedScenes: [String] = []
 
         for path in Set(changed).sorted() {
             if path == Manifest.fileName { structureChanged = true; continue }
+            if path.hasPrefix(FeedbackEntry.folder + "/") { feedbackChanged = true; continue }
             guard path.hasPrefix(Self.scenesFolder + "/"), path.hasSuffix(".md") else { continue }
             let id = String(path.dropFirst(Self.scenesFolder.count + 1).dropLast(3))
             touchedScenes.append(id)
@@ -223,6 +225,7 @@ extension Book {
         if !added.isEmpty { parts.append("Neu: " + Self.list(added)) }
         if !removed.isEmpty { parts.append("Entfernt: " + Self.list(removed)) }
         if structureChanged { parts.append("Struktur geändert") }
+        if feedbackChanged { parts.append("Feedback") }
         if parts.isEmpty { parts.append("Sonstige Änderungen") }
         if let customSubject { parts = [customSubject] }
         if delta != 0 { parts.append(Self.signed(delta) + " Wörter") }

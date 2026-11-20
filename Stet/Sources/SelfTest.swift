@@ -486,6 +486,52 @@ enum SelfTest {
         report["exports"] = exports
         check(session.milestones.filter(\.isExport).count == exports.count, "exportsMarkedInHistory")
 
+        // Notes and feedback: comment + TODO, finish the TODO, round trip through Word, place the
+        // comment again, a feedback entry with an attachment, compare with the version it refers to.
+        await session.select(first)
+        await session.loadNotes()
+        let notesBefore = session.notes.count
+        await editor.select(from: 0, to: 24)
+        try? await editor.insertComment("@Gisela: Selbsttest-Kommentar")
+        await editor.select(from: 0, to: 0)
+        try? await editor.insertComment("TODO: Selbsttest-Aufgabe")
+        await session.loadNotes()
+        check(session.notes.count == notesBefore + 2, "notesFound")
+        if let todo = session.notes.first(where: { $0.kind == .todo && $0.text == "Selbsttest-Aufgabe" }) {
+            await session.resolve(todo)
+            let textAfter = (try? await editor.text()) ?? ""
+            check(!session.notes.contains { $0.text == "Selbsttest-Aufgabe" } && !textAfter.contains("Selbsttest-Aufgabe"), "todoResolved")
+        } else {
+            check(false, "todoListed")
+        }
+        var docxOptions = ExportOptions(format: .docx, quotes: session.defaultExportQuotes)
+        docxOptions.commentsAsAnnotations = true
+        let review = work.appendingPathComponent("Export/Zurueck.docx")
+        if Exporter.missingTools(for: .docx).isEmpty, let exported = await session.export(docxOptions, to: review) {
+            // Today's text without the comment, as if it had been answered in the meantime.
+            if let comment = session.notes.first(where: { $0.text == "Selbsttest-Kommentar" }) { await session.resolve(comment) }
+            let entry = await session.importWord(exported.file, from: "Gisela", refersTo: exported.tag, note: "")
+            let wordComment = entry?.wordComments.first { $0.text == "Selbsttest-Kommentar" }
+            check(wordComment != nil && wordComment?.anchor.isEmpty == false, "wordCommentRead")
+            if let entry, let wordComment {
+                let placed = await session.place(wordComment, of: entry)
+                await session.loadNotes()
+                check(placed && session.notes.contains { $0.text == "Selbsttest-Kommentar" && $0.author == "Gisela" && $0.highlighted != nil }, "wordCommentPlacedAtItsPassage")
+                check(session.feedback.first { $0.id == entry.id }?.wordComments.first { $0.text == "Selbsttest-Kommentar" }?.placed == true, "wordCommentMarkedPlaced")
+                await session.compareWithFeedbackVersion(entry)
+                check(session.comparison != nil, "compareWithFeedbackVersion")
+                session.comparison = nil
+            }
+        }
+        let photo = work.appendingPathComponent("Foto vom Ausdruck.jpg")
+        try? Data("JPEG".utf8).write(to: photo)
+        let note = session.addFeedback(from: "Horst", received: Date(), refersTo: session.latestExportTag, text: "Schön!", attachments: [photo])
+        check(note != nil && fm.fileExists(atPath: session.attachmentURL(note?.attachments.first ?? "-").path), "feedbackWithAttachment")
+        await session.saveVersion()
+        check(((try? await book.git.log(limit: 1).first)?.subject.contains("Feedback")) == true, "feedbackInVersion")
+        report["notesAfter"] = session.notes.count - notesBefore
+        report["feedbackEntries"] = session.feedback.count
+
         // Server: connect to a local test server; a "second Mac" (a clone) writes, this Mac brings it
         // in; then both change the same passage and the merge goes through the decision window.
         let server = work.appendingPathComponent("server.git")

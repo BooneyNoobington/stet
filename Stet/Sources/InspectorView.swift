@@ -5,6 +5,8 @@ struct InspectorView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case scene = "Details"
         case history = "Verlauf"
+        case notes = "Notizen"
+        case feedback = "Feedback"
         var id: String { rawValue }
     }
 
@@ -23,6 +25,8 @@ struct InspectorView: View {
             switch tab {
             case .scene: DetailsForm(session: session)
             case .history: HistoryList(session: session)
+            case .notes: NotesList(session: session)
+            case .feedback: FeedbackPanel(session: session)
             }
         }
     }

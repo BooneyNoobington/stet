@@ -24,6 +24,14 @@ export interface StetEditorAPI {
   getText(): string;
   /** Replaces the whole text as one undoable edit (used to restore an older version). */
   replaceText(text: string): void;
+  /** Selects a range (UTF-16 offsets), scrolls it to the middle and focuses the editor. */
+  select(from: number, to: number): void;
+  /** Replaces a range as one undoable edit. */
+  replaceRange(from: number, to: number, text: string): void;
+  /** Wraps the selection as `{==…==}{>>comment<<}`, or inserts `{>>comment<<}` at the cursor. */
+  insertComment(comment: string): void;
+  /** Wraps a range as `{==…==}{>>comment<<}`. */
+  commentRange(from: number, to: number, comment: string): void;
   setSettings(patch: Partial<EditorSettings>): EditorSettings;
   getSettings(): EditorSettings;
   stats(): TextStats;

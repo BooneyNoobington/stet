@@ -135,6 +135,23 @@ final class EditorController: NSObject, ObservableObject {
         try await call("window.stet.replaceText(text); return true", ["text": text])
     }
 
+    func select(from: Int, to: Int) async {
+        _ = try? await call("window.stet.select(a, b); return true", ["a": from, "b": to])
+        webView.window?.makeFirstResponder(webView)
+    }
+
+    func replaceRange(from: Int, to: Int, with text: String) async throws {
+        try await call("window.stet.replaceRange(a, b, t); return true", ["a": from, "b": to, "t": text])
+    }
+
+    func insertComment(_ comment: String) async throws {
+        try await call("window.stet.insertComment(c); return true", ["c": comment])
+    }
+
+    func commentRange(from: Int, to: Int, comment: String) async throws {
+        try await call("window.stet.commentRange(a, b, c); return true", ["a": from, "b": to, "c": comment])
+    }
+
     func applySettings() async {
         _ = try? await call("return window.stet.setSettings(s)", ["s": settings.dictionary])
     }
