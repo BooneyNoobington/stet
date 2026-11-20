@@ -10,6 +10,7 @@ extension BookSession {
         case milestone
         case server
         case export
+        case backup
 
         var id: String {
             switch self {
@@ -19,6 +20,7 @@ extension BookSession {
             case .milestone: "milestone"
             case .server: "server"
             case .export: "export"
+            case .backup: "backup"
             }
         }
     }

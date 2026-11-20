@@ -35,6 +35,7 @@ struct StetCommands: Commands {
             Divider()
             Button("Ordner importieren …") { model.showImportPanel() }
             Button("Buch vom Server holen …") { model.showCloneSheet = true }
+            Button("Backup wiederherstellen …") { model.showRestorePanel() }
             Divider()
             Button("Buch schließen") { Task { await model.closeBook() } }
                 .disabled(model.session == nil)
@@ -47,6 +48,11 @@ struct StetCommands: Commands {
         CommandGroup(replacing: .importExport) {
             Button("Exportieren …") { model.session?.sheet = .export }
                 .keyboardShortcut("e")
+                .disabled(model.session == nil)
+            Button("Backup sichern …") { model.showBackupPanel() }
+                .keyboardShortcut("b", modifiers: [.command, .option])
+                .disabled(model.session == nil)
+            Button("Backups einstellen …") { model.session?.sheet = .backup }
                 .disabled(model.session == nil)
         }
         CommandMenu("Buch") {

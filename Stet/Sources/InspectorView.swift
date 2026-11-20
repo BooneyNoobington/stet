@@ -94,6 +94,16 @@ private struct DetailsForm: View {
                     set: { value in session.updateBook { $0.language = value } }
                 ))
                 LabeledContent("Wörter", value: session.totalWords.formatted())
+                LabeledContent("Backups") {
+                    HStack {
+                        Text(session.backupSummary)
+                            .lineLimit(1)
+                            .foregroundStyle(session.backupWarning == nil ? Color.primary : Color.orange)
+                            .help(session.backupWarning ?? session.backupSummary)
+                        Button("Einstellen …") { session.sheet = .backup }
+                            .controlSize(.small)
+                    }
+                }
                 LabeledContent("Server") {
                     HStack {
                         Text(session.serverURL.map(shortServer) ?? "–")

@@ -46,6 +46,7 @@ final class BookSession: ObservableObject {
     // Notes and feedback (see BookSession+Feedback.swift)
     @Published var notes: [NoteItem] = []
     @Published var feedback: [FeedbackEntry] = []
+    @Published var backupWarning: String?
 
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
@@ -112,6 +113,7 @@ final class BookSession: ObservableObject {
         await resumeAdoptionIfNeeded()
         await loadServer()
         if isConnected && adoption == nil { await syncNow() }
+        await maybeAutoBackup()
     }
 
     /// Writes everything to disk and takes a snapshot. Called before closing or quitting.
@@ -318,6 +320,7 @@ final class BookSession: ObservableObject {
             hasChangesSinceVersion = false
             lastVersion = try? await book.git.log(limit: 1).first
             scheduleSync()
+            Task { await maybeAutoBackup() }
             let delta = result.wordsDelta == 0 ? "" : " · \(result.wordsDelta > 0 ? "+" : "")\(result.wordsDelta.formatted()) Wörter"
             showToast(Toast(message: "Version gesichert" + delta, commit: result.commit))
             await loadHistory()
@@ -404,6 +407,11 @@ final class BookSession: ObservableObject {
 struct LocalState: Codable {
     var lastSceneID: String?
     var keepInSyncedFolder = false
+    // Optional, so state files written before these existed still decode.
+    var autoBackup: Bool?
+    var backupFolder: String?
+    var backupKeep: Int?
+    var lastAutoBackup: Date?
 
     private static func url(for book: Book) -> URL {
         book.url.appendingPathComponent(Book.localFolder).appendingPathComponent("state.json")

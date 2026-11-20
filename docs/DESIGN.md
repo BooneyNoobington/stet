@@ -4,7 +4,7 @@
 
 Stet is a macOS app for long-form creative writing that keeps a lossless, branchable history of the work using git, without the writer ever seeing git. In one sentence: **GitKraken for writers.**
 
-Status: Phases 1 (core) and 2 (experiments) and server sync from Phase 3 are built (Nov 2026). Sections marked **Open** still need a decision.
+Status: Phases 1–3 are built (core, experiments, sync, export, notes & feedback, backups) – Nov 2026. Sections marked **Open** still need a decision.
 
 ---
 
@@ -290,8 +290,14 @@ Tools: Pandoc and Typst from Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`, `P
 
 ## 12. Backup
 
-- **Backup now** → zip of the whole package, history included, to a user-chosen place, plus optional rotating automatic backups.
-- Pushing to the server is the other backup. Time Machine covers packages automatically.
+A backup is **one ZIP file** of the whole package: history, experiments, milestones, export marks, feedback with attachments, and also unsaved text on disk. Per-device state (`.local/`) is left out. Name: `<Titel> – Backup 2026-11-20 1430.stet.zip`; unzipped it is `<Titel>.stet`, ready to open.
+
+- **Written safely**: `/usr/bin/zip` into a temporary folder, checked with `unzip -t`, then moved into the target in one step. A half-written backup never appears there, which matters for synced folders.
+- **A single file is fine for sync services.** Unlike a live book, a backup may sit in Nextcloud, iCloud or Dropbox, or on an external drive.
+- **Backup sichern … (⌥⌘B)** writes a backup to a file of the writer's choice.
+- **Backup wiederherstellen …** unpacks a backup into a chosen folder and opens it. A book of the same name stays untouched (the restored one is called "… (wiederhergestellt)"); the archive is checked first.
+- **Automatic backups** (Inspector ▸ Buch ▸ Backups, or Ablage ▸ Backups einstellen …) are per book and per Mac (`.local/state.json`). They run at most once every 20 hours, on opening or after ⌘S, into a chosen folder (default `~/Documents/Stet-Backups`), and keep the newest N of this book (other books' backups in the same folder are not touched). If the folder is unavailable, e.g. a drive is unplugged, the inspector shows a quiet hint instead of an error dialog.
+- The server and Time Machine are further backups.
 
 ## 12a. Import
 

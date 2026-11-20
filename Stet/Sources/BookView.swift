@@ -87,6 +87,7 @@ struct BookView: View {
             case .milestone: MilestoneSheet(session: session)
             case .server: ServerSheet(session: session)
             case .export: ExportSheet(session: session)
+            case .backup: BackupSheet(session: session)
             }
         }
         .overlay {

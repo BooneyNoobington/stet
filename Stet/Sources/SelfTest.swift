@@ -207,6 +207,8 @@ enum SelfTest {
         {
             switch CommandLine.arguments[flag + 1] {
             case "server": session.sheet = .server
+            case "backup": session.sheet = .backup
+            case "export": session.sheet = .export
             case "server-key":
                 _ = await session.createKey()
                 session.sheet = .server
@@ -531,6 +533,32 @@ enum SelfTest {
         check(((try? await book.git.log(limit: 1).first)?.subject.contains("Feedback")) == true, "feedbackInVersion")
         report["notesAfter"] = session.notes.count - notesBefore
         report["feedbackEntries"] = session.feedback.count
+
+        // Backups: automatic (once a day), by hand, restore.
+        var backupSettings = session.backupSettings
+        backupSettings.automatic = true
+        backupSettings.folder = work.appendingPathComponent("Backups")
+        backupSettings.keep = 2
+        session.save(backupSettings)
+        await session.maybeAutoBackup()
+        check(Backup.list(in: backupSettings.folder, for: book).count == 1, "autoBackupCreated")
+        await session.maybeAutoBackup()
+        check(Backup.list(in: backupSettings.folder, for: book).count == 1, "autoBackupOncePerDay")
+        for _ in 0..<2 { await session.backupToFolder() }
+        check(Backup.list(in: backupSettings.folder, for: book).count == 2, "backupsRotated")
+        if let latest = Backup.list(in: backupSettings.folder, for: book).first,
+           let restored = try? await Backup.restore(latest.url, into: work.appendingPathComponent("Wiederhergestellt")),
+           let copy = try? Book(url: restored)
+        {
+            let originalHead = await book.git.headCommit()
+            let copyHead = await copy.git.headCommit()
+            let copyCount = (try? await copy.git.log().count) ?? 0
+            let originalCount = (try? await book.git.log().count) ?? -1
+            check(copyHead == originalHead && copyCount == originalCount && copy.manifest == book.manifest, "backupRestoredComplete")
+        } else {
+            check(false, "backupRestore")
+        }
+        report["backupBytes"] = Backup.list(in: backupSettings.folder, for: book).first?.size ?? 0
 
         // Server: connect to a local test server; a "second Mac" (a clone) writes, this Mac brings it
         // in; then both change the same passage and the merge goes through the decision window.
