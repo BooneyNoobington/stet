@@ -53,3 +53,9 @@ build/Stet.app/Contents/MacOS/Stet --preview-html <book.stet> preview.html
 ```
 
 The `--selftest-book` check imports the folder into a temporary book and drives the whole flow: scenes, editing, versions, notes, snapshots, history, restore, structure and health. It deletes the temporary book afterwards and only reads the folder.
+
+## License
+
+Stet is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE). Copyright © 2026 Markus Roth.
+
+The app contains third-party components under the MIT license (CodeMirror and Lezer in the editor, Yams with libYAML in the core); their notices are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `scripts/third-party-notices.sh` regenerates after dependency changes. Pandoc, Typst and git are separate programs that Stet runs; they are not part of it.
