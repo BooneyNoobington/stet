@@ -19,6 +19,11 @@ struct StetApp: App {
         }
         .defaultSize(width: 860, height: 620)
 
+        Window("Statistik", id: "stats") {
+            StatsWindow(model: model)
+        }
+        .defaultSize(width: 760, height: 720)
+
         Window("Rechtschreibung", id: "spelling") {
             SpellingWindow(model: model)
         }
@@ -88,6 +93,9 @@ struct StetCommands: Commands {
             Button("Wiki exportieren …") { model.session?.exportWiki() }
                 .disabled(model.session?.wiki.isEmpty != false)
             Divider()
+            Button("Statistik") { model.openWindowAction?(id: "stats") }
+                .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(model.session == nil)
             Button("Rechtschreibung prüfen …") {
                 model.openWindowAction?(id: "spelling")
                 Task { await model.session?.reviewSpelling() }

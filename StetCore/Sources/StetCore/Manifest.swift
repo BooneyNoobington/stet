@@ -17,6 +17,8 @@ public struct Manifest: Equatable {
     public var factFields: [String]?
     /// Words that are spelled right in this book (names, invented words …), for the spelling check.
     public var words: [String]?
+    /// Words the book should reach (the writer's goal), if set.
+    public var wordGoal: Int?
     public var structure: [StructureNode]
     /// Top-level keys Stet doesn't know (written by a newer version); preserved as is.
     public var unknown: [UnknownKey] = []
@@ -232,9 +234,10 @@ extension Manifest {
         manifest.epubCSS = map["epubCSS"]?.string
         manifest.factFields = map["factFields"]?.sequence?.compactMap(\.string)
         manifest.words = map["words"]?.sequence?.compactMap(\.string)
+        manifest.wordGoal = map["wordGoal"]?.int
         manifest.structure = try (map["structure"]?.sequence ?? []).map(Self.parseNode)
 
-        let known: Set<String> = ["format", "title", "authors", "author", "language", "year", "cover", "epubCSS", "factFields", "words", "structure"]
+        let known: Set<String> = ["format", "title", "authors", "author", "language", "year", "cover", "epubCSS", "factFields", "words", "wordGoal", "structure"]
         for (key, value) in map {
             if let name = key.string, !known.contains(name) {
                 manifest.unknown.append(UnknownKey(key: name, value: value))
@@ -277,6 +280,7 @@ extension Manifest {
         if let cover { pairs.append(("cover", Node(cover))) }
         if let epubCSS { pairs.append(("epubCSS", Node(epubCSS))) }
         if let factFields { pairs.append(("factFields", Node(factFields.map { Node($0) }))) }
+        if let wordGoal { pairs.append(("wordGoal", Node(String(wordGoal)))) }
         if let words, !words.isEmpty { pairs.append(("words", Node(words.map { Node($0, Tag(.str), .doubleQuoted) }))) }
         pairs.append(("structure", Node(structure.map(Self.node))))
         for extra in unknown { pairs.append((Node(extra.key), extra.value)) }

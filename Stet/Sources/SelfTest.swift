@@ -262,6 +262,23 @@ enum SelfTest {
                 _ = session.createWiki(title: "Leuchtfeuer", kind: .term)
                 model.openWiki(mara?.id)
             case "export": session.sheet = .export
+            case "stats":
+                // A made-up writing history (empty versions with word trailers), never the manuscript.
+                var total = session.totalWords
+                let formatter = ISO8601DateFormatter()
+                for offset in stride(from: 40, through: 1, by: -1) where offset % 7 != 3 {
+                    let delta = [420, 610, 180, 0, 950, -120, 300, 520][offset % 8]
+                    total += delta
+                    let date = formatter.string(from: Date().addingTimeInterval(Double(-offset) * 86_400))
+                    let message = "Probe\n\nStet-Words: \(total)\nStet-Words-Delta: \(delta)\nStet-Active-Minutes: \(20 + offset % 5 * 9)\n"
+                    _ = try? await session.book.git.run(["-c", "user.name=Test", "-c", "user.email=t@x", "commit", "--allow-empty", "--quiet", "-F", "-"],
+                                                        input: Data(message.utf8), environment: ["GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date])
+                }
+                session.updateBook { $0.goal = total + 9_000 }
+                await session.loadStats()
+                model.openWindowAction?(id: "stats")
+                try? await Task.sleep(for: .seconds(1.5))
+                standalone = NSApp.windows.first { $0.isVisible && $0.title.hasPrefix("Statistik") }
             case "spelling-review":
                 // Sample text (never the manuscript).
                 try? await model.editor.replaceText("Ein ganz normaler Satzz mit Feler.\n\nDas Fensterr stand offen, und das Fensterr klapperte.\n")
@@ -945,6 +962,25 @@ enum SelfTest {
             ProofSettings.shared.signing = nil
         } else {
             check(false, "throwawaySigningKey")
+        }
+
+        // Statistics: the whole history, including the versions from before Stet (numbers only).
+        let statsStart = Date()
+        await session.loadStats()
+        report["statsSeconds"] = (Date().timeIntervalSince(statsStart) * 10).rounded() / 10
+        if let stats = session.stats {
+            let line = ((try? await book.git.run(["rev-list", "--first-parent", "HEAD"]).string) ?? "").split(separator: "\n").count
+            check(stats.progress.count == line, "statsFollowTheHistory")
+            check(stats.progress.dropLast().allSatisfy { $0.words > 0 }, "statsCountOldVersions")
+            check(stats.progress.last?.words == book.totalWords(), "statsMatchTheBook")
+            check(stats.day(Date()).map { $0.versions > 0 } == true, "statsToday")
+            report["statsDaysWithWriting"] = stats.days.count
+            report["statsVersions"] = stats.progress.count
+            let again = Date()
+            await session.loadStats()
+            report["statsSecondsCached"] = (Date().timeIntervalSince(again) * 10).rounded() / 10
+        } else {
+            check(false, "statsLoaded")
         }
 
         // Health and location

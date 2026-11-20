@@ -159,6 +159,16 @@ Stet-Scenes: 7f3a9c,b21e04
 
 `Stet-Active-Minutes` comes from the editor (time with keystrokes, minus idle gaps). Git timestamps only record *when* a save happened.
 
+## 6a. Writing statistics
+
+**Buch ▸ Statistik** (⌥⌘I), also a click on „Heute: +523“ in the status bar:
+- Tiles: today (net words, active minutes, progress toward the daily goal), this week (words, writing days, time), streak (days in a row with words added or ≥ 5 active minutes; an empty today doesn't break it), the book (words, progress toward its goal).
+- Words per day for 30 days, per week for 12 weeks, or per month for the whole history (net: written minus deleted; days with more deleted than written show grey below the line), with the daily goal as a line, a hover callout and a table view. "Das Buch wächst": the book's words along the open version's history, with the book's goal.
+- Chapters: words per chapter and how many scenes are done.
+- Goals: a daily goal per Mac (preferences) and a goal for the book (`wordGoal:` in `manuscript.yaml`, travels with the book).
+
+Sources: the trailers of every version (`Stet-Words`, `Stet-Words-Delta`, `Stet-Active-Minutes`). Days count versions on all branches (experiments included; merges don't count twice); the growth line follows the open version (first-parent), ordered by date, ties in history order. Versions from before Stet have no trailers: their words are counted once from the scenes folder of that time (`scenes/`, or the folder with the most Markdown files, not the top folder with notes and read-mes) and remembered in `.local/word-counts.json`. Today also includes what is written but not saved yet.
+
 ## 7. Editor
 
 **Engine: CodeMirror 6 in a `WKWebView`** for the writing pane. Everything else (navigator, history, inspector, settings, dialogs) is native SwiftUI.
@@ -395,7 +405,7 @@ The Xcode project is generated from `project.yml` by XcodeGen, so it stays revie
 2. **Experiments**: start, switch, adopt (merge UI), adopt scenes, shelve, milestones.
 3. **Comments/TODOs, feedback inbox, export** (combined Markdown, .docx, .odt, ePUB, PDF), backups, server sync.
 4. **Wiki**, quick facts on hover, **signing + timestamps**.
-5. Later: statistics from trailers, graphical history, timeline view, `.docx` comment import, local LLM (commit summaries), web app for iPad.
+5. Later: graphical history, timeline view, local LLM (commit summaries), web app for iPad. (Statistics from trailers and `.docx` comment import are built.)
 
 ## 18. Open questions
 

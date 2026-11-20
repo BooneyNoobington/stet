@@ -72,6 +72,7 @@ final class BookSession: ObservableObject {
     @Published var isReviewingSpelling = false
     @Published var spellingReviewed: Date?
     @Published var wikiNotice: String?
+    @Published var stats: WritingStats?
 
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
@@ -145,6 +146,7 @@ final class BookSession: ObservableObject {
         if isConnected && adoption == nil { await syncNow() }
         await maybeAutoBackup()
         await startProofs()
+        await loadStats()
     }
 
     /// Writes everything to disk and takes a snapshot. Called before closing or quitting.
@@ -184,6 +186,9 @@ final class BookSession: ObservableObject {
         sceneFacts[scene.id] = scene.factList
         wordCounts[scene.id] = TextStats.words(in: scene.body)
     }
+
+    /// Minutes with keystrokes since the last version (not yet in the history).
+    var unsavedMinutes: Int { activeMinutes.count }
 
     var totalWords: Int {
         manifest.sceneIDs.reduce(0) { sum, id in
@@ -365,6 +370,7 @@ final class BookSession: ObservableObject {
             scheduleSync()
             Task { await maybeAutoBackup() }
             Task { await versionSaved() }
+            Task { await loadStats() }
             let delta = result.wordsDelta == 0 ? "" : " · \(result.wordsDelta > 0 ? "+" : "")\(result.wordsDelta.formatted()) Wörter"
             showToast(Toast(message: "Version gesichert" + delta, commit: result.commit))
             await loadHistory()

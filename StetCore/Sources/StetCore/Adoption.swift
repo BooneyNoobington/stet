@@ -20,6 +20,7 @@ extension Manifest {
         result.cover = pick(base.cover, ours.cover, theirs.cover)
         result.epubCSS = pick(base.epubCSS, ours.epubCSS, theirs.epubCSS)
         result.factFields = pick(base.factFields, ours.factFields, theirs.factFields)
+        result.wordGoal = pick(base.wordGoal, ours.wordGoal, theirs.wordGoal)
         // Both sides' new words are kept (and both sides' removals).
         let mergedWords = mergeList(base: base.words ?? [], ours: ours.words ?? [], theirs: theirs.words ?? [])
         result.words = mergedWords.isEmpty ? nil : Manifest.sortedWords(mergedWords)

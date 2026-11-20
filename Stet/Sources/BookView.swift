@@ -132,6 +132,15 @@ struct StatusBar: View {
         HStack(spacing: 14) {
             Text("Szene: \(editor.words.formatted()) Wörter")
             Text("Buch: \(session.totalWords.formatted()) Wörter")
+            if session.wordsToday != 0 {
+                Button {
+                    AppModel.shared.openWindowAction?(id: "stats")
+                } label: {
+                    Text("Heute: \(session.wordsToday > 0 ? "+" : "")\(session.wordsToday.formatted())")
+                }
+                .buttonStyle(.plain)
+                .help("Wörter seit heute früh – Klicken öffnet die Statistik (⌥⌘I)")
+            }
             Spacer()
             Text(saveState)
             if let server = session.syncStatusText {
