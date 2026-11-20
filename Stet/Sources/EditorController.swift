@@ -35,6 +35,24 @@ struct EditorSettings: Equatable, Codable {
     var language = "de"
     var showComments = true
     var focusMode = false
+    var showWikiTerms = true
+
+    init() {}
+
+    /// Missing keys (from settings saved by an older version) fall back to the defaults.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = EditorSettings()
+        font = try c.decodeIfPresent(Font.self, forKey: .font) ?? d.font
+        fontSize = try c.decodeIfPresent(Double.self, forKey: .fontSize) ?? d.fontSize
+        lineHeight = try c.decodeIfPresent(Double.self, forKey: .lineHeight) ?? d.lineHeight
+        columnWidth = try c.decodeIfPresent(Double.self, forKey: .columnWidth) ?? d.columnWidth
+        quotes = try c.decodeIfPresent(Quotes.self, forKey: .quotes) ?? d.quotes
+        language = try c.decodeIfPresent(String.self, forKey: .language) ?? d.language
+        showComments = try c.decodeIfPresent(Bool.self, forKey: .showComments) ?? d.showComments
+        focusMode = try c.decodeIfPresent(Bool.self, forKey: .focusMode) ?? d.focusMode
+        showWikiTerms = try c.decodeIfPresent(Bool.self, forKey: .showWikiTerms) ?? d.showWikiTerms
+    }
 
     private static let defaultsKey = "EditorSettings"
 
@@ -66,6 +84,7 @@ struct EditorSettings: Equatable, Codable {
             "language": language,
             "showComments": showComments,
             "focusMode": focusMode,
+            "showWikiTerms": showWikiTerms,
         ]
     }
 }
@@ -82,19 +101,30 @@ final class EditorController: NSObject, ObservableObject {
         didSet { settings.save() }
     }
 
-    let webView: WKWebView
+    let webView: StetWebView
     private var readyWaiters: [CheckedContinuation<Void, Never>] = []
 
     var onReady: (() -> Void)?
     var onChange: (() -> Void)?
     var onActivity: (() -> Void)?
+    var onOpenWiki: ((String) -> Void)?
+    /// Builds extra items for the right-click menu from what was clicked (text, wiki entry id).
+    var contextMenuProvider: ((String, String?) -> [NSMenuItem])?
+    private var lastContext: (text: String, wikiID: String?, at: Date)?
+
+    private func contextMenuItems() -> [NSMenuItem] {
+        guard let context = lastContext, Date().timeIntervalSince(context.at) < 2 else { return [] }
+        lastContext = nil
+        return contextMenuProvider?(context.text, context.wikiID) ?? []
+    }
 
     override init() {
         let configuration = WKWebViewConfiguration()
         let contentController = WKUserContentController()
         configuration.userContentController = contentController
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = StetWebView(frame: .zero, configuration: configuration)
         super.init()
+        webView.contextItems = { [weak self] in self?.contextMenuItems() ?? [] }
 
         contentController.add(WeakMessageHandler(self), name: "stet")
         webView.setValue(false, forKey: "drawsBackground")
@@ -152,6 +182,14 @@ final class EditorController: NSObject, ObservableObject {
         try await call("window.stet.commentRange(a, b, c); return true", ["a": from, "b": to, "c": comment])
     }
 
+    func setWikiTerms(_ terms: [[String: Any]]) async {
+        _ = try? await call("window.stet.setWikiTerms(t); return true", ["t": terms])
+    }
+
+    func selectedText() async -> String {
+        ((try? await call("return window.stet.selectedText()")) as? String) ?? ""
+    }
+
     func applySettings() async {
         _ = try? await call("return window.stet.setSettings(s)", ["s": settings.dictionary])
     }
@@ -191,6 +229,10 @@ extension EditorController: WKScriptMessageHandler {
             characters = (body["characters"] as? NSNumber)?.intValue ?? 0
         case "activity":
             onActivity?()
+        case "openWiki":
+            if let id = body["id"] as? String { onOpenWiki?(id) }
+        case "contextMenu":
+            lastContext = ((body["text"] as? String) ?? "", body["wikiId"] as? String, Date())
         default:
             break
         }
@@ -209,4 +251,33 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         target?.userContentController(controller, didReceive: message)
     }
+}
+
+/// The editor's web view, with Stet's items at the top of the native right-click menu
+/// (spelling suggestions, Look Up etc. stay).
+final class StetWebView: WKWebView {
+    var contextItems: (() -> [NSMenuItem])?
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        let items = contextItems?() ?? []
+        guard !items.isEmpty else { return }
+        menu.insertItem(.separator(), at: 0)
+        for item in items.reversed() { menu.insertItem(item, at: 0) }
+    }
+}
+
+/// A menu item that runs a closure.
+final class ActionMenuItem: NSMenuItem {
+    private let handler: () -> Void
+
+    init(_ title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: "")
+        target = self
+    }
+
+    required init(coder: NSCoder) { fatalError("not used") }
+
+    @objc private func run() { handler() }
 }

@@ -13,6 +13,11 @@ struct StetApp: App {
         }
         .defaultSize(width: 1180, height: 800)
         .commands { StetCommands(model: model, editor: model.editor) }
+
+        Window("Wiki", id: "wiki") {
+            WikiWindow(model: model)
+        }
+        .defaultSize(width: 860, height: 620)
     }
 }
 
@@ -56,6 +61,17 @@ struct StetCommands: Commands {
                 .disabled(model.session == nil)
         }
         CommandMenu("Buch") {
+            Button("Wiki öffnen") { model.openWiki() }
+                .keyboardShortcut("w", modifiers: [.command, .option])
+                .disabled(model.session == nil)
+            Button("Wiki-Eintrag aus Auswahl") {
+                Task {
+                    if let entry = await model.session?.wikiEntryFromSelection() { model.openWiki(entry.id) }
+                }
+            }
+            .keyboardShortcut("w", modifiers: [.command, .control])
+            .disabled(model.session == nil)
+            Divider()
             Button("Mit dem Server abgleichen") { Task { await model.session?.syncNow() } }
                 .keyboardShortcut("s", modifiers: [.command, .control])
                 .disabled(model.session?.isConnected != true)
@@ -108,6 +124,7 @@ struct StetCommands: Commands {
                 .keyboardShortcut("k", modifiers: [.command, .shift])
             Toggle("Fokusmodus", isOn: $editor.settings.focusMode)
                 .keyboardShortcut("f", modifiers: [.command, .option])
+            Toggle("Wiki-Namen unterstreichen", isOn: $editor.settings.showWikiTerms)
             Divider()
         }
     }

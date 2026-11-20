@@ -65,6 +65,11 @@ struct BookView: View {
                 }
                 .help("Verlauf dieser Szene")
 
+                Button { AppModel.shared.openWiki() } label: {
+                    Label("Wiki", systemImage: "text.book.closed")
+                }
+                .help("Wiki: Figuren, Orte, Begriffe (⌥⌘W)")
+
                 Button { session.sheet = .export } label: {
                     Label("Exportieren", systemImage: "square.and.arrow.up")
                 }

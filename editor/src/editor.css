@@ -178,3 +178,68 @@ body {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
+
+/* Wiki names --------------------------------------------------------------- */
+
+.stet-wiki-term {
+  text-decoration: underline dotted;
+  text-decoration-color: color-mix(in srgb, var(--stet-accent) 60%, transparent);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.cm-tooltip.cm-tooltip-hover:has(.stet-wiki-card) {
+  border: none;
+  background: transparent;
+}
+
+.stet-wiki-card {
+  max-width: 300px;
+  padding: 10px 12px;
+  font: 12.5px/1.45 var(--stet-ui);
+  color: var(--stet-text);
+  background: var(--stet-bubble-bg);
+  border: 1px solid var(--stet-bubble-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.stet-wiki-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.stet-wiki-card-head span {
+  font-size: 11px;
+  color: var(--stet-muted);
+}
+
+.stet-wiki-card dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1px 10px;
+  margin: 6px 0;
+}
+
+.stet-wiki-card dt {
+  color: var(--stet-muted);
+}
+
+.stet-wiki-card dd {
+  margin: 0;
+}
+
+.stet-wiki-card p {
+  margin: 4px 0 6px;
+  font-style: italic;
+  color: var(--stet-muted);
+}
+
+.stet-wiki-card button {
+  all: unset;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--stet-accent);
+}

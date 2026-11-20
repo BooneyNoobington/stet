@@ -36,6 +36,8 @@ struct InspectorView: View {
 
 private struct DetailsForm: View {
     @ObservedObject var session: BookSession
+    @State private var addingFact = false
+    @State private var newFactKey = ""
 
     var body: some View {
         Form {
@@ -62,9 +64,34 @@ private struct DetailsForm: View {
                         .frame(minHeight: 70)
                         .scrollContentBackground(.hidden)
                     }
-                    ForEach(scene.facts, id: \.key) { fact in
-                        LabeledContent(fact.key, value: fact.value)
+                }
+                Section("Fakten") {
+                    ForEach(session.factRows(for: scene)) { fact in
+                        HStack {
+                            TextField(fact.key, text: Binding(
+                                get: { fact.value },
+                                set: { session.setFact(fact.key, to: $0) }
+                            ), prompt: Text("–"))
+                            if let entry = session.wikiEntry(for: fact) {
+                                Button { AppModel.shared.openWiki(entry.id) } label: { Image(systemName: "text.book.closed") }
+                                    .buttonStyle(.borderless)
+                                    .help("„\(entry.title)“ im Wiki öffnen")
+                            }
+                        }
                     }
+                    Button("Feld hinzufügen …") { addingFact = true }
+                        .controlSize(.small)
+                }
+                .alert("Neues Feld für diese Szene", isPresented: $addingFact) {
+                    TextField("Name", text: $newFactKey)
+                    Button("Hinzufügen") {
+                        let key = newFactKey.trimmingCharacters(in: .whitespaces)
+                        if !key.isEmpty { session.setFact(key, to: "…") }
+                        newFactKey = ""
+                    }
+                    Button("Abbrechen", role: .cancel) { newFactKey = "" }
+                } message: {
+                    Text("Felder für alle Szenen legst du unten beim Buch fest.")
                 }
                 if let chapter = session.manifest.chapter(containing: scene.id) {
                     Section("Kapitel") {
@@ -94,6 +121,15 @@ private struct DetailsForm: View {
                     set: { value in session.updateBook { $0.language = value } }
                 ))
                 LabeledContent("Wörter", value: session.totalWords.formatted())
+                TextField("Fakten-Felder", text: Binding(
+                    get: { session.manifest.sceneFactFields.joined(separator: ", ") },
+                    set: { value in
+                        session.updateBook {
+                            $0.sceneFactFields = value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                        }
+                    }
+                ))
+                .help("Die Felder, die jede Szene anbietet, durch Kommas getrennt – z. B. Datum, Uhrzeit, Ort, Perspektive, Wetter.")
                 LabeledContent("Backups") {
                     HStack {
                         Text(session.backupSummary)

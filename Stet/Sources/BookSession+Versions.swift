@@ -113,6 +113,8 @@ extension BookSession {
         lastVersion = try? await book.git.log(limit: 1).first
         await refreshVersions()
         await loadHistory()
+        loadWiki()
+        await pushWikiTerms()
     }
 
     private func perform(_ work: () async throws -> Void) async {

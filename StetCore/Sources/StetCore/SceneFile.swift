@@ -56,6 +56,10 @@ public struct SceneFile: Equatable {
         } ?? []
     }
 
+    mutating func setFacts(_ node: Node?) {
+        set("facts", node)
+    }
+
     /// Title, or the opening words when the scene has none.
     public var displayTitle: String {
         if let title { return title }

@@ -1,12 +1,17 @@
 import type { EditorSettings } from "./settings";
 import type { TextStats } from "./stats";
+import type { WikiTerm } from "./wiki";
 
 /** Messages the editor posts to the host (the Swift app) via `webkit.messageHandlers.stet`. */
 export type HostMessage =
   | { type: "ready" }
   | { type: "changed" }
   | { type: "stats"; words: number; characters: number }
-  | { type: "activity" };
+  | { type: "activity" }
+  | { type: "openWiki"; id: string }
+  /** Sent on right-click, before the native menu opens: the selection (or the word under the
+   *  mouse) and the wiki entry under the mouse, if any. */
+  | { type: "contextMenu"; text: string; wikiId: string | null };
 
 export interface StressTestResult {
   words: number;
@@ -32,6 +37,10 @@ export interface StetEditorAPI {
   insertComment(comment: string): void;
   /** Wraps a range as `{==…==}{>>comment<<}`. */
   commentRange(from: number, to: number, comment: string): void;
+  /** Names with wiki entries, for underlining and the fact cards. */
+  setWikiTerms(terms: WikiTerm[]): void;
+  /** The selected text (main selection). */
+  selectedText(): string;
   setSettings(patch: Partial<EditorSettings>): EditorSettings;
   getSettings(): EditorSettings;
   stats(): TextStats;

@@ -134,7 +134,7 @@ Rejected: excluding only `.git` from sync. The text would sync and the history w
 ## 5. Structure and navigation
 
 - **Navigator**: a tree in the style of Typora's sidebar. No file names or icons. Drag and drop to reorder, a quiet word count, and a status dot (draft / revised / done).
-- **Quick facts**: user-defined fields per book (e.g. *Datum, Uhrzeit, Ort, POV, Wetter*). They are stored in the scene's front matter, or in `manuscript.yaml` for chapters and parts, and shown on hover in the navigator. A fact can point to a wiki entry (`[[Hafen]]`); hovering it shows that entry's quick facts.
+- **Quick facts**: fields defined per book (`factFields` in `manuscript.yaml`, default *Datum, Uhrzeit, Ort, Perspektive*), edited in Inspector ▸ Details per scene, plus extra fields a single scene needs. They are stored in the scene's front matter (empty values aren't written) and shown in the navigator's tooltip. A value can point to a wiki entry (`[[Hafen]]`, or simply a known name); the inspector then offers to open it. Chapter and part facts come later.
 - Later: a **timeline view** plotting story time against reading order, for pacing.
 
 ## 6. Saving and history
@@ -242,24 +242,28 @@ The body holds the feedback text. In the entry:
 
 ## 10. Wiki
 
-Git has no wiki. Forge wikis (Gitea, GitHub) are a separate repository, and issues live in the forge's database, so neither is used. Instead, the `wiki/` folder sits in the same repository, so the wiki is versioned and branched together with the manuscript.
+Git has no wiki. Forge wikis (Gitea, GitHub) are a separate repository, and issues live in the forge's database, so neither is used. Instead, the `wiki/` folder sits in the same repository, so the wiki is versioned, branched with experiments and synced like the manuscript.
 
 ```markdown
 ---
-title: Mara Kessler
-kind: character             # character | place | term | … (user-extensible)
-aliases: [Mara, Captain Kessler, die Kapitänin]
+title: "Mara Kessler"
+kind: character             # character | place | term | note
+aliases: ["Mara", "die Kapitänin"]
 facts:
-  Geboren: 1921
-  Augen: grau
+  "Geboren": "1921"
+  "Herkunft": "[[Hamburg]]"  # links to another entry
 ---
-Free-form background …
+Free-form notes …
 ```
 
-- **No markup in the prose.** The editor underlines alias matches (Unicode word boundaries, case-sensitive per entry). Clicking one opens the entry; hovering shows its quick facts.
-- **Create entry from selection** adds the selected text as an alias.
-- Backlinks ("appears in …") are computed from the same matching.
-- Optional export as a glossary appendix (ePUB/PDF).
+- **No markup in the prose.** The editor underlines every name (title and aliases) with a dotted line. Matching is whole words with Unicode letters, case-sensitive, longest name first, and a genitive `-s` counts ("Maras" → Mara).
+- **Hovering a name shows a card** with kind, quick facts (`[[…]]` shown as plain text) and the entry's first line. ⌘-click, or the card's link, opens the entry. Underlining can be switched off (Darstellung ▸ Wiki-Namen unterstreichen).
+- **Wiki window** (⌥⌘W or the toolbar): entries grouped by kind, with search. For each entry: name, kind, other names, facts, notes, and **Kommt vor in** (the scenes with a count; a click opens the scene at the first occurrence). Edits are saved after a short pause.
+- **Wiki-Eintrag aus Auswahl (⌃⌘W)**: the selected name gets an entry, or its existing entry opens.
+- **Right-click in the text**: on the selection, or on the word under the mouse, the native menu (spelling, Look Up …) gets wiki items on top: „Name“ im Wiki öffnen if an entry exists (or the name is underlined), otherwise „Name“ ins Wiki aufnehmen with a submenu for the kind (Figur, Ort, Begriff, Notiz).
+- Plain Markdown files in `wiki/` (e.g. imported notes) appear as notes, titled after the file name.
+- Versions that change the wiki say "Wiki".
+- Later: optional export as a glossary appendix.
 
 ## 11. Export
 

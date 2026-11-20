@@ -156,6 +156,7 @@ struct NavigatorView: View {
         if chapterTitle != nil, let title = session.titles[id] { lines.append(title) }
         if let status = session.statuses[id] ?? nil { lines.append(status.label) }
         if let synopsis = session.synopses[id] ?? nil { lines.append(synopsis) }
+        for fact in session.sceneFacts[id] ?? [] { lines.append("\(fact.key): \(fact.displayValue)") }
         return lines.joined(separator: "\n")
     }
 }

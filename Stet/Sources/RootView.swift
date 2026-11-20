@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var editor: EditorController
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Group {
@@ -35,6 +36,7 @@ struct RootView: View {
             ImportReportView(report: item.report) { model.importReport = nil }
         }
         .sheet(isPresented: $model.showCloneSheet) { CloneSheet(model: model) }
+        .onAppear { model.openWindowAction = openWindow }
     }
 }
 

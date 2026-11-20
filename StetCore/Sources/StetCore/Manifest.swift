@@ -13,6 +13,8 @@ public struct Manifest: Equatable {
     public var year: Int?
     public var cover: String?
     public var epubCSS: String?
+    /// The quick-fact fields of scenes (nil: the defaults).
+    public var factFields: [String]?
     public var structure: [StructureNode]
     /// Top-level keys Stet doesn't know (written by a newer version); preserved as is.
     public var unknown: [UnknownKey] = []
@@ -226,9 +228,10 @@ extension Manifest {
         manifest.format = map["format"]?.int ?? Manifest.currentFormat
         manifest.cover = map["cover"]?.string
         manifest.epubCSS = map["epubCSS"]?.string
+        manifest.factFields = map["factFields"]?.sequence?.compactMap(\.string)
         manifest.structure = try (map["structure"]?.sequence ?? []).map(Self.parseNode)
 
-        let known: Set<String> = ["format", "title", "authors", "author", "language", "year", "cover", "epubCSS", "structure"]
+        let known: Set<String> = ["format", "title", "authors", "author", "language", "year", "cover", "epubCSS", "factFields", "structure"]
         for (key, value) in map {
             if let name = key.string, !known.contains(name) {
                 manifest.unknown.append(UnknownKey(key: name, value: value))
@@ -270,6 +273,7 @@ extension Manifest {
         if let year { pairs.append(("year", Node(String(year)))) }
         if let cover { pairs.append(("cover", Node(cover))) }
         if let epubCSS { pairs.append(("epubCSS", Node(epubCSS))) }
+        if let factFields { pairs.append(("factFields", Node(factFields.map { Node($0) }))) }
         pairs.append(("structure", Node(structure.map(Self.node))))
         for extra in unknown { pairs.append((Node(extra.key), extra.value)) }
         return Self.emit(Node(pairs))

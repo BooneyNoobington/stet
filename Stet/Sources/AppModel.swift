@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import StetCore
 import UniformTypeIdentifiers
 
@@ -18,6 +19,9 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var importReport: Importer.Report?
     @Published var showCloneSheet = false
+    @Published var wikiSelection: String?
+    /// Set by the main window, so menu commands and the editor can open the wiki window.
+    var openWindowAction: OpenWindowAction?
 
     private static let recentKey = "RecentBooks"
 

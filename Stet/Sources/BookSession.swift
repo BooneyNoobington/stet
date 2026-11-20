@@ -47,6 +47,8 @@ final class BookSession: ObservableObject {
     @Published var notes: [NoteItem] = []
     @Published var feedback: [FeedbackEntry] = []
     @Published var backupWarning: String?
+    @Published var wiki: [WikiEntry] = []
+    @Published private(set) var sceneFacts: [String: [Fact]] = [:]
 
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
@@ -86,6 +88,9 @@ final class BookSession: ObservableObject {
         reloadSceneInfo()
         editor.onChange = { [weak self] in self?.editorChanged() }
         editor.onActivity = { [weak self] in self?.activeMinutes.insert(Int(Date().timeIntervalSince1970 / 60)) }
+        editor.onOpenWiki = { id in AppModel.shared.openWiki(id) }
+        editor.contextMenuProvider = { [weak self] text, wikiID in self?.contextMenuItems(text: text, wikiID: wikiID) ?? [] }
+        loadWiki()
         editor.settings.language = manifest.language
         editor.settings.quotes = EditorSettings.quotes(forLanguage: manifest.language)
 
@@ -100,6 +105,7 @@ final class BookSession: ObservableObject {
 
         await editor.waitUntilReady()
         await editor.applySettings()
+        await pushWikiTerms()
         let localState = LocalState.load(for: book)
         let first = localState.lastSceneID.flatMap { manifest.sceneIDs.contains($0) ? $0 : nil } ?? manifest.sceneIDs.first
         if let first { await select(first) }
@@ -125,6 +131,9 @@ final class BookSession: ObservableObject {
         observers.removeAll()
         editor.onChange = nil
         editor.onActivity = nil
+        editor.onOpenWiki = nil
+        editor.contextMenuProvider = nil
+        await editor.setWikiTerms([])
     }
 
     // MARK: - Scene info for the navigator
@@ -145,6 +154,7 @@ final class BookSession: ObservableObject {
         titles[scene.id] = scene.displayTitle
         statuses[scene.id] = scene.status
         synopses[scene.id] = scene.synopsis
+        sceneFacts[scene.id] = scene.factList
         wordCounts[scene.id] = TextStats.words(in: scene.body)
     }
 

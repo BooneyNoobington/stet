@@ -208,6 +208,15 @@ enum SelfTest {
             switch CommandLine.arguments[flag + 1] {
             case "server": session.sheet = .server
             case "backup": session.sheet = .backup
+            case "wiki":
+                var mara = session.createWiki(title: "Mara Kessler", kind: .character)
+                mara?.aliases = ["Mara", "die Kapitänin"]
+                mara?.facts = [Fact("Geboren", "1921"), Fact("Augen", "grau"), Fact("Herkunft", "[[Hamburg]]")]
+                mara?.body = "Kam 1953 als Leuchtturmwärterin auf die Insel."
+                if let mara { session.saveWiki(mara) }
+                _ = session.createWiki(title: "Hamburg", kind: .place)
+                _ = session.createWiki(title: "Leuchtfeuer", kind: .term)
+                model.openWiki(mara?.id)
             case "export": session.sheet = .export
             case "server-key":
                 _ = await session.createKey()
@@ -215,7 +224,7 @@ enum SelfTest {
             default: break
             }
             try? await Task.sleep(for: .seconds(1.5))
-            if let folder, let sheetWindow = window.attachedSheet,
+            if let folder, let sheetWindow = window.attachedSheet ?? NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix("Wiki") }),
                let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(sheetWindow.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
             {
                 try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -533,6 +542,76 @@ enum SelfTest {
         check(((try? await book.git.log(limit: 1).first)?.subject.contains("Feedback")) == true, "feedbackInVersion")
         report["notesAfter"] = session.notes.count - notesBefore
         report["feedbackEntries"] = session.feedback.count
+
+        // Wiki: an entry from a selected name, underlined in the editor, appearances; scene facts.
+        await session.select(first)
+        let prose = (try? await editor.text()) ?? ""
+        let nameRegex = try! NSRegularExpression(pattern: #"(?<![\p{L}])\p{Lu}\p{Ll}{3,}(?![\p{L}])"#)
+        let candidates = nameRegex.matches(in: prose, range: NSRange(location: 1, length: max(0, (prose as NSString).length - 1)))
+        if let name = candidates.dropFirst(2).first {
+            await editor.select(from: name.range.location, to: name.range.location + name.range.length)
+            let entry = await session.wikiEntryFromSelection()
+            check(entry != nil, "wikiEntryFromSelection")
+            if let entry {
+                check(!session.appearances(of: entry).isEmpty, "wikiAppearances")
+                try? await Task.sleep(for: .milliseconds(300))
+                let underlined = ((try? await editor.call("return document.querySelectorAll('.stet-wiki-term').length")) as? NSNumber)?.intValue ?? 0
+                check(underlined > 0, "wikiNamesUnderlined")
+                var edited = entry
+                edited.facts = [Fact("Rolle", "Selbsttest")]
+                session.saveWiki(edited)
+                check(session.wiki.first { $0.id == entry.id }?.facts == [Fact("Rolle", "Selbsttest")], "wikiEntrySaved")
+            }
+        } else {
+            check(false, "wikiCandidateName")
+        }
+        if let known = session.wiki.first(where: { $0.kind == .character }) {
+            let open = session.contextMenuItems(text: known.title, wikiID: nil)
+            check(open.first?.title == "„\(known.title)“ im Wiki öffnen", "contextMenuOpensKnownEntry")
+            let byID = session.contextMenuItems(text: "", wikiID: known.id)
+            check(byID.first?.title == "„\(known.title)“ im Wiki öffnen", "contextMenuOnUnderlinedName")
+        }
+        // The real path: a right-click in the editor tells Swift what was clicked, then the
+        // native menu opens and gets the wiki items on top.
+        func rightClick(_ selector: String) async -> NSMenu {
+            _ = try? await editor.call("""
+                const el = document.querySelector(selector); const r = el.getBoundingClientRect();
+                el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2,
+                  clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+                """, ["selector": selector])
+            try? await Task.sleep(for: .milliseconds(200))
+            let menu = NSMenu()
+            menu.addItem(withTitle: "Nachschlagen", action: nil, keyEquivalent: "")
+            if let event = NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                              windowNumber: editor.webView.window?.windowNumber ?? 0, context: nil,
+                                              eventNumber: 0, clickCount: 1, pressure: 1) {
+                editor.webView.willOpenMenu(menu, with: event)
+            }
+            return menu
+        }
+        await editor.select(from: 0, to: 0)
+        let onName = await rightClick(".stet-wiki-term")
+        check(onName.items.first?.title.hasSuffix("im Wiki öffnen") == true
+              && onName.items.last?.title == "Nachschlagen", "rightClickOnUnderlinedName")
+        if let other = candidates.dropFirst(5).first {
+            await editor.select(from: other.range.location, to: other.range.location + other.range.length)
+            let onSelection = await rightClick(".cm-content")
+            let title = onSelection.items.first?.title ?? ""
+            check(title.hasSuffix("ins Wiki aufnehmen") || title.hasSuffix("im Wiki öffnen"), "rightClickOnSelection")
+        }
+        let add = session.contextMenuItems(text: "Selbsttest-Ort,", wikiID: nil)
+        check(add.first?.title == "„Selbsttest-Ort“ ins Wiki aufnehmen" && add.first?.submenu?.items.count == 4, "contextMenuOffersKinds")
+        if let kinds = add.first?.submenu, let index = kinds.items.firstIndex(where: { $0.title == "als Ort" }) {
+            kinds.performActionForItem(at: index)
+            check(session.wiki.contains { $0.title == "Selbsttest-Ort" && $0.kind == .place }, "contextMenuCreatesEntry")
+        }
+        report["wikiEntries"] = session.wiki.count
+        session.setFact("Datum", to: "14.3.1953")
+        await session.persist()
+        check(((try? book.readScene(first))?.factList.contains(Fact("Datum", "14.3.1953"))) == true, "sceneFactSaved")
+        check(session.sceneFacts[first]?.contains(Fact("Datum", "14.3.1953")) == true, "sceneFactForNavigator")
+        await session.saveVersion()
+        check(((try? await book.git.log(limit: 1).first)?.subject.contains("Wiki")) == true, "wikiInVersion")
 
         // Backups: automatic (once a day), by hand, restore.
         var backupSettings = session.backupSettings

@@ -17,6 +17,8 @@ export interface EditorSettings {
   language: string;
   showComments: boolean;
   focusMode: boolean;
+  /** Underline names that have a wiki entry. */
+  showWikiTerms: boolean;
 }
 
 export const defaultSettings: EditorSettings = {
@@ -28,6 +30,7 @@ export const defaultSettings: EditorSettings = {
   language: "de",
   showComments: true,
   focusMode: false,
+  showWikiTerms: true,
 };
 
 export const fontStacks: Record<FontChoice, string> = {

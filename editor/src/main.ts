@@ -13,6 +13,7 @@ import { defaultSettings, type EditorSettings, fontStacks, setSettings, settings
 import { type TextStats, textStats } from "./stats";
 import { proseHighlight, stetTheme } from "./theme";
 import { typography } from "./typography";
+import { setWikiTerms, type WikiTerm, wikiExtensions, wikiField, wikiState } from "./wiki";
 
 // ---------------------------------------------------------------------------
 // Host bridge
@@ -33,6 +34,8 @@ function post(message: HostMessage) {
 // Settings → CSS
 
 let settings: EditorSettings = { ...defaultSettings };
+// Kept across load(), which creates a new editor state.
+let wikiTerms: WikiTerm[] = [];
 
 function applyCssVariables(s: EditorSettings) {
   const root = document.documentElement;
@@ -89,6 +92,23 @@ function scheduleStats(delay = 300) {
 function extensions(): Extension[] {
   return [
     settingsField.init(() => settings),
+    wikiField.init(() => wikiState(wikiTerms)),
+    wikiExtensions((id) => post({ type: "openWiki", id })),
+    EditorView.domEventHandlers({
+      // Tell the host what was right-clicked, so the native menu can offer wiki items.
+      contextmenu(event, view) {
+        const wikiId = (event.target as HTMLElement).closest<HTMLElement>(".stet-wiki-term")?.dataset.wiki ?? null;
+        const selection = view.state.selection.main;
+        let text = view.state.sliceDoc(selection.from, selection.to);
+        if (!text.trim()) {
+          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          const word = pos === null ? null : view.state.wordAt(pos);
+          text = word ? view.state.sliceDoc(word.from, word.to) : "";
+        }
+        post({ type: "contextMenu", text: text.slice(0, 120), wikiId });
+        return false; // keep the native menu (spelling, look up, …)
+      },
+    }),
     history(),
     keymap.of([...stetKeymap, ...defaultKeymap, ...historyKeymap]),
     markdown(),
@@ -187,6 +207,14 @@ const api: StetEditorAPI = {
       effects: EditorView.scrollIntoView(from, { y: "center" }),
       userEvent: "input",
     });
+  },
+  setWikiTerms(terms) {
+    wikiTerms = terms;
+    view.dispatch({ effects: setWikiTerms.of(terms) });
+  },
+  selectedText() {
+    const range = view.state.selection.main;
+    return view.state.sliceDoc(range.from, range.to);
   },
   setSettings(patch) {
     settings = { ...settings, ...patch };

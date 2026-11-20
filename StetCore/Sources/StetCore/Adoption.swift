@@ -19,6 +19,7 @@ extension Manifest {
         result.year = pick(base.year, ours.year, theirs.year)
         result.cover = pick(base.cover, ours.cover, theirs.cover)
         result.epubCSS = pick(base.epubCSS, ours.epubCSS, theirs.epubCSS)
+        result.factFields = pick(base.factFields, ours.factFields, theirs.factFields)
 
         func nodes(_ m: Manifest) -> [String: StructureNode] {
             Dictionary(m.structure.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
