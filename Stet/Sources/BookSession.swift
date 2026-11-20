@@ -37,6 +37,12 @@ final class BookSession: ObservableObject {
     @Published var adoption: Adoption?
     @Published var isBusy = false
 
+    // Server (see BookSession+Server.swift)
+    @Published var serverURL: String?
+    @Published var stetKey: SSHKey?
+    @Published var syncState: SyncState = .off
+    var syncTask: Task<Void, Never>?
+
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
     @Published var comparison: Comparison?
@@ -100,12 +106,15 @@ final class BookSession: ObservableObject {
         health = report.isHealthy ? nil : report
         await refreshVersions()
         await resumeAdoptionIfNeeded()
+        await loadServer()
+        if isConnected && adoption == nil { await syncNow() }
     }
 
     /// Writes everything to disk and takes a snapshot. Called before closing or quitting.
     func close() async {
         await persistAndSnapshot()
         snapshotTimer?.invalidate()
+        syncTask?.cancel()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers.removeAll()
         editor.onChange = nil
@@ -304,6 +313,7 @@ final class BookSession: ObservableObject {
             activeMinutes.removeAll()
             hasChangesSinceVersion = false
             lastVersion = try? await book.git.log(limit: 1).first
+            scheduleSync()
             let delta = result.wordsDelta == 0 ? "" : " · \(result.wordsDelta > 0 ? "+" : "")\(result.wordsDelta.formatted()) Wörter"
             showToast(Toast(message: "Version gesichert" + delta, commit: result.commit))
             await loadHistory()

@@ -80,6 +80,7 @@ struct BookView: View {
             case .adopt(let experiment): AdoptSheet(session: session, experiment: experiment)
             case .conflicts: ConflictSheet(session: session)
             case .milestone: MilestoneSheet(session: session)
+            case .server: ServerSheet(session: session)
             }
         }
         .overlay {
@@ -115,6 +116,16 @@ struct StatusBar: View {
             Text("Buch: \(session.totalWords.formatted()) Wörter")
             Spacer()
             Text(saveState)
+            if let server = session.syncStatusText {
+                Divider().frame(height: 10)
+                Button {
+                    if case .offline = session.syncState { session.sheet = .server } else { Task { await session.syncNow() } }
+                } label: {
+                    Label(server, systemImage: serverSymbol)
+                }
+                .buttonStyle(.plain)
+                .help((session.syncStatusDetail ?? "") + "\nKlicken zum Abgleichen")
+            }
         }
         .font(.caption)
         .monospacedDigit()
@@ -122,6 +133,15 @@ struct StatusBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
         .background(.bar)
+    }
+
+    private var serverSymbol: String {
+        switch session.syncState {
+        case .offline: "icloud.slash"
+        case .needsMerge, .serverHasNew: "arrow.down.circle"
+        case .syncing: "arrow.triangle.2.circlepath"
+        default: "checkmark.icloud"
+        }
     }
 
     private var saveState: String {
@@ -150,6 +170,21 @@ struct Banners: View {
                 Banner(symbol: "flask", text: "Experiment „\(experiment.name)“", detail: "– was du hier schreibst, ändert die Hauptfassung nicht.", tint: .purple) {
                     Button("Übernehmen …") { session.sheet = .adopt(experiment) }
                     Button("Zur Hauptfassung") { Task { await session.switchTo(session.mainBranch) } }
+                }
+            }
+            if session.adoption == nil {
+                switch session.syncState {
+                case .needsMerge:
+                    Banner(symbol: "arrow.triangle.merge", text: "Auf dem Server gibt es Änderungen von einem anderen Mac.",
+                           detail: "Beide Fassungen werden zusammengeführt; wo nötig, entscheidest du.", tint: .blue) {
+                        Button("Zusammenführen …") { Task { await session.mergeWithServer() } }
+                    }
+                case .serverHasNew:
+                    Banner(symbol: "arrow.down.circle", text: "Neue Versionen vom Server verfügbar.", tint: .blue) {
+                        Button("Holen") { Task { await session.syncNow() } }
+                    }
+                default:
+                    EmptyView()
                 }
             }
             if let finding = session.syncFinding {

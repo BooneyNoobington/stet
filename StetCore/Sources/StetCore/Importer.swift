@@ -50,6 +50,7 @@ public enum Importer {
         let git = Git(directory: destination)
 
         // 1. Copy, keeping history if there is one.
+        try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         if isRepository {
             try await Git(directory: destination.deletingLastPathComponent())
                 .run(["clone", "--quiet", "--no-hardlinks", source.path, destination.path])

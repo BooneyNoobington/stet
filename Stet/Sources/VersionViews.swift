@@ -254,8 +254,8 @@ struct ConflictSheet: View {
         if let adoption = session.adoption {
             VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("„\(adoption.name)“ übernehmen").font(.title2)
-                    Text("Hier haben Hauptfassung und Experiment dieselbe Stelle unterschiedlich geändert. Entscheide, was bleiben soll – alles andere ist schon zusammengeführt.")
+                    Text(adoption.fromServer ? "Mit dem Server zusammenführen" : "„\(adoption.name)“ übernehmen").font(.title2)
+                    Text("Hier haben \(adoption.mainLabel) und \(adoption.otherLabel) dieselbe Stelle unterschiedlich geändert. Entscheide, was bleiben soll – alles andere ist schon zusammengeführt.")
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -281,12 +281,12 @@ struct ConflictSheet: View {
                 }
                 Divider()
                 HStack {
-                    Button("Übernahme abbrechen") { Task { await session.cancelAdoption() } }
-                        .help("Nichts wird verändert; Hauptfassung und Experiment bleiben, wie sie sind.")
+                    Button(adoption.fromServer ? "Abbrechen" : "Übernahme abbrechen") { Task { await session.cancelAdoption() } }
+                        .help("Nichts wird verändert; beide Seiten bleiben, wie sie sind.")
                     Spacer()
                     Text(adoption.openCount == 0 ? "Alles entschieden" : "Noch \(adoption.openCount) offen")
                         .foregroundStyle(.secondary)
-                    Button("Übernahme abschließen") { Task { await session.finishAdoption() } }
+                    Button(adoption.fromServer ? "Zusammenführen abschließen" : "Übernahme abschließen") { Task { await session.finishAdoption() } }
                         .keyboardShortcut(.defaultAction)
                         .disabled(adoption.openCount > 0 || session.isBusy)
                 }
@@ -315,6 +315,7 @@ private struct ConflictDetail: View {
                         case .conflict(let main, let experiment):
                             PassageChoice(
                                 main: main, experiment: experiment,
+                                mainLabel: adoption.mainLabel, otherLabel: adoption.otherLabel,
                                 choice: adoption.passages[conflict.path]?[index],
                                 choose: { session.choose($0, for: conflict, passage: index) }
                             )
@@ -322,14 +323,14 @@ private struct ConflictDetail: View {
                     }
                 case .deletedInMain:
                     WholeChoice(
-                        text: "In der Hauptfassung wurde diese Szene gelöscht, im Experiment wurde sie bearbeitet.",
+                        text: "\(adoption.mainLabel): Szene gelöscht. \(adoption.otherLabel): Szene bearbeitet.",
                         options: [("Szene behalten", .keep), ("Szene löschen", .delete)],
                         choice: adoption.wholeFile[conflict.path],
                         choose: { session.choose($0, forWhole: conflict) }
                     )
                 case .deletedInExperiment:
                     WholeChoice(
-                        text: "Im Experiment wurde diese Szene gelöscht, in der Hauptfassung wurde sie bearbeitet.",
+                        text: "\(adoption.otherLabel): Szene gelöscht. \(adoption.mainLabel): Szene bearbeitet.",
                         options: [("Szene behalten", .keep), ("Szene löschen", .delete)],
                         choice: adoption.wholeFile[conflict.path],
                         choose: { session.choose($0, forWhole: conflict) }
@@ -337,7 +338,7 @@ private struct ConflictDetail: View {
                 case .whole:
                     WholeChoice(
                         text: "„\(conflict.path)“ wurde auf beiden Seiten geändert und lässt sich nicht absatzweise zusammenführen.",
-                        options: [("Fassung der Hauptfassung", .main), ("Fassung des Experiments", .experiment)],
+                        options: [(adoption.mainLabel, .main), (adoption.otherLabel, .experiment)],
                         choice: adoption.wholeFile[conflict.path],
                         choose: { session.choose($0, forWhole: conflict) }
                     )
@@ -375,6 +376,8 @@ private struct ContextText: View {
 private struct PassageChoice: View {
     let main: String
     let experiment: String
+    var mainLabel = "Hauptfassung"
+    var otherLabel = "Experiment"
     let choice: BookSession.Adoption.Choice?
     let choose: (BookSession.Adoption.Choice) -> Void
     @State private var editing = false
@@ -383,8 +386,8 @@ private struct PassageChoice: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
-                side("Hauptfassung", main, chosen: choice == .main || choice == .both) { choose(.main) }
-                side("Experiment", experiment, chosen: choice == .experiment || choice == .both) { choose(.experiment) }
+                side(mainLabel, main, chosen: choice == .main || choice == .both) { choose(.main) }
+                side(otherLabel, experiment, chosen: choice == .experiment || choice == .both) { choose(.experiment) }
             }
             HStack {
                 Button("Beide behalten") { choose(.both) }

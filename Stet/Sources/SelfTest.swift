@@ -200,6 +200,28 @@ enum SelfTest {
             try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("\(name).png"))
         }
 
+        // Optional: snapshot a sheet (e.g. --sheet server), then close it.
+        if let flag = CommandLine.arguments.firstIndex(of: "--sheet"), CommandLine.arguments.indices.contains(flag + 1),
+           let session = model.session
+        {
+            switch CommandLine.arguments[flag + 1] {
+            case "server": session.sheet = .server
+            case "server-key":
+                _ = await session.createKey()
+                session.sheet = .server
+            default: break
+            }
+            try? await Task.sleep(for: .seconds(1.5))
+            if let folder, let sheetWindow = window.attachedSheet,
+               let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(sheetWindow.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
+            {
+                try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
+                try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("sheet.png"))
+            }
+            await session.removeKey()
+            session.sheet = nil
+            try? await Task.sleep(for: .seconds(0.5))
+        }
         report["contentMinSize"] = "\(window.contentMinSize)"
         report["minSize"] = "\(window.minSize)"
 
@@ -439,6 +461,59 @@ enum SelfTest {
             await session.shelve(experiment)
         }
         check(session.shelvedExperiments.contains { $0.name == "Selbsttest Experiment" }, "shelved")
+
+        // Server: connect to a local test server; a "second Mac" (a clone) writes, this Mac brings it
+        // in; then both change the same passage and the merge goes through the decision window.
+        let server = work.appendingPathComponent("server.git")
+        _ = try? await Git(directory: work).run(["init", "--quiet", "--bare", "--initial-branch=main", server.path])
+        let connectError = await session.connectServer(server.path)
+        check(connectError == nil, "serverConnected")
+        func serverMain() async -> String? {
+            try? await Git(directory: server).run(["rev-parse", "main"]).string.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let localHead = await book.git.headCommit()
+        let remoteHead = await serverMain()
+        check(remoteHead != nil && remoteHead == localHead, "serverHasTheBook")
+        let secondMac = try? await Book.clone(from: server.path, to: work.appendingPathComponent("ZweiterMac/Buch.stet"))
+        check(secondMac != nil, "secondMacCloned")
+        if let other = secondMac {
+            if var scene = try? other.readScene(first) {
+                scene.body += "\n\nVom zweiten Mac geschrieben."
+                try? other.writeScene(scene)
+            }
+            _ = try? await other.saveVersion()
+            _ = try? await other.sync(device: "selftest-second")
+            await session.syncNow()
+            check(((try? await editor.text()) ?? "").contains("Vom zweiten Mac geschrieben."), "secondMacTextArrived")
+
+            // Both change the same passage.
+            if var scene = try? other.readScene(first), let range = scene.body.range(of: "\n") {
+                scene.body.insert(contentsOf: " (zweiter Mac)", at: range.lowerBound)
+                try? other.writeScene(scene)
+            }
+            _ = try? await other.saveVersion()
+            _ = try? await other.sync(device: "selftest-second")
+            await editFirstParagraph(" (dieser Mac)")
+            await session.saveVersion()
+            for _ in 0..<40 where session.syncState != .needsMerge { try? await Task.sleep(for: .milliseconds(150)) }
+            check(session.syncState == .needsMerge, "serverMergeDetected")
+            await session.mergeWithServer()
+            check(session.adoption?.fromServer == true, "serverConflictWindow")
+            if let conflict = session.adoption?.conflicts.first, case .text(let segments) = conflict.kind {
+                for (index, segment) in segments.enumerated() {
+                    if case .conflict = segment { session.choose(.main, for: conflict, passage: index) }
+                }
+            }
+            await session.finishAdoption()
+            let mergedText = (try? await editor.text()) ?? ""
+            check(mergedText.contains("(dieser Mac)") && !mergedText.contains("(zweiter Mac)") && !mergedText.contains("<<<<<<<"), "serverMergeDecisionApplied")
+            for _ in 0..<40 where await serverMain() != (await book.git.headCommit()) { try? await Task.sleep(for: .milliseconds(150)) }
+            let mergedRemote = await serverMain()
+            let mergedLocal = await book.git.headCommit()
+            check(mergedRemote == mergedLocal, "mergeSentToServer")
+            let afterMerge = try? await other.sync(device: "selftest-second")
+            check((try? other.readScene(first).body.contains("(dieser Mac)")) == true && afterMerge?.pulledVersions ?? 0 > 0, "secondMacGotTheMerge")
+        }
 
         // Health and location
         check((await HealthCheck.run(book)).isHealthy, "healthy")

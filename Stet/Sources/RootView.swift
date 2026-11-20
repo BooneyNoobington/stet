@@ -34,6 +34,7 @@ struct RootView: View {
         .sheet(item: Binding(get: { model.importReport.map(IdentifiedReport.init) }, set: { model.importReport = $0?.report })) { item in
             ImportReportView(report: item.report) { model.importReport = nil }
         }
+        .sheet(isPresented: $model.showCloneSheet) { CloneSheet(model: model) }
     }
 }
 
@@ -58,6 +59,7 @@ struct WelcomeView: View {
                 Button("Neues Buch …") { model.showNewBookPanel() }
                 Button("Buch öffnen …") { model.showOpenPanel() }
                 Button("Ordner importieren …") { model.showImportPanel() }
+                Button("Vom Server holen …") { model.showCloneSheet = true }
             }
             .controlSize(.large)
 

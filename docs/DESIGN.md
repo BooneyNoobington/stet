@@ -4,7 +4,7 @@
 
 Stet is a macOS app for long-form creative writing that keeps a lossless, branchable history of the work using git, without the writer ever seeing git. In one sentence: **GitKraken for writers.**
 
-Status: Phases 1 (core) and 2 (experiments) are built (Nov 2026). Sections marked **Open** still need a decision.
+Status: Phases 1 (core) and 2 (experiments) and server sync from Phase 3 are built (Nov 2026). Sections marked **Open** still need a decision.
 
 ---
 
@@ -272,11 +272,20 @@ Typst ships inside the app (small, Apache-2.0). Pandoc is a Homebrew dependency 
 
 ## 13. Sync and remotes
 
-If a book has a remote configured, **the remote is the source of truth.**
+If a book has a remote (`origin`), **the remote is the source of truth.**
 
-- **On open**: `git fetch`. If the server is ahead and the local copy has no unsaved changes, fast-forward silently. If both sides changed, show "Your other Mac saved changes too" and use the same adopt/merge screen as for experiments.
-- **On save**: commit, then push in the background. If offline, the push is queued. If rejected (server ahead), fetch and merge as above. A push can never silently overwrite newer work, which fixes the original Nextcloud data loss.
-- Credentials come from the system: the `osxkeychain` credential helper for HTTPS, and `ssh-agent` / `~/.ssh/config` for SSH.
+- **Connecting** (Inspector ▸ Buch ▸ Server, or Buch ▸ Server …) first checks the server (`ls-remote` plus a fetch into a temporary ref). An **empty** repository gets the whole book. A server with **this book's history** is continued. This includes a repository used before Stet: Stet's main version is a fast-forward of it, so the server afterwards shows the Stet layout, and the old files stay in its history; the sheet says so. A server with **another project** is refused.
+- **On open**: full sync. Stet fetches, fast-forwards what the server has (main version and experiments), and sends what's new here. Pending changes are saved as a version first.
+- **After ⌘S** (and after starting/shelving experiments, milestones, adoptions): sync **without integrating**. Stet only sends, and reports when the server has new versions. Nothing in the working tree changes while the writer may be typing. A blue banner offers **Holen** (fetch, with the text written to disk first).
+- **Both Macs wrote**: the banner offers **Zusammenführen …**. It uses the adoption machinery (`mergeWithServer` = merge of `origin/main`), with the same decision window labelled *Dieser Mac* | *Server*. The result is a merge version "Mit dem Server zusammengeführt" (`Stet-Merged-From:`).
+- **What is sent**: all branches that are ahead (`main`, `experiments/*`, `shelved/*`), milestone tags, notes (`refs/notes/commits`, merged with `cat_sort_uniq` on fetch), and this Mac's snapshot ref (the only forced push; one writer per ref). Branches that are behind or diverged are never sent; a diverged experiment is reported and left alone.
+- **Shelving travels**: shelving deletes the experiment's old name on the server. A Mac that still has it active, at the same version, renames it to `shelved/…` as well. An experiment shelved here is not brought back by its old name.
+- **Fetching never deletes local data**: `--prune` applies only to remote-tracking branches. (With a tags refspec it would delete milestones the server doesn't have yet; a test guards this.)
+- **Addresses with a port**: the short form `user@host:path` can't carry a port; `git@host:2222/name/buch.git` would be read as path `2222/…`. The server sheet recognises this and offers `ssh://git@host:2222/name/buch.git` (or the short form without port if `~/.ssh/config` already sets it).
+- **Own key per book** (optional): for SSH keys that ask for Touch ID or a passphrase on every use (e.g. Secretive), Stet can create a passphrase-less ed25519 key for one book. It lives in `~/Library/Application Support/Stet/Keys` (folder 700, key 600), outside the book, so it's never synced. It is used only for that book via the book's local `core.sshCommand` (`-i <key> -o IdentitiesOnly=yes -o IdentityAgent=none`). Before creating it, the sheet explains the risks: an unencrypted key readable by any program of the user, and included in Time Machine backups. It recommends adding the key in Gitea as a **deploy key of that one repository** (with write access), not to the account. Removing it deletes it from the Mac; the sheet reminds the writer to remove the deploy key too. "Buch vom Server holen" can create such a key before cloning.
+- **Network**: SSH runs with `BatchMode=yes` and `ConnectTimeout=15`, so it never waits for a password or host-key question. git/ssh errors are translated: unknown host, no connection, unknown host key ("connect once in Terminal"), permission denied, no repository. HTTPS uses the system credential helper.
+- **Second Mac**: "Buch vom Server holen …" clones the book; experiments come along as local branches. Experiment names travel as their slug (`Kapitel-3-aus-Maras-Sicht` → "Kapitel 3 aus Maras Sicht"); real hyphens in names become spaces on the other Mac.
+- **Status bar**: "Server: abgeglichen 14:02 / wird abgeglichen / neue Versionen verfügbar / zusammenführen nötig / nicht erreichbar". Click to sync now (⌃⌘S).
 
 ## 14. Signing and timestamps
 

@@ -34,6 +34,7 @@ struct StetCommands: Commands {
             .disabled(model.recentBooks.isEmpty)
             Divider()
             Button("Ordner importieren …") { model.showImportPanel() }
+            Button("Buch vom Server holen …") { model.showCloneSheet = true }
             Divider()
             Button("Buch schließen") { Task { await model.closeBook() } }
                 .disabled(model.session == nil)
@@ -44,6 +45,12 @@ struct StetCommands: Commands {
                 .disabled(model.session == nil)
         }
         CommandMenu("Buch") {
+            Button("Mit dem Server abgleichen") { Task { await model.session?.syncNow() } }
+                .keyboardShortcut("s", modifiers: [.command, .control])
+                .disabled(model.session?.isConnected != true)
+            Button("Server …") { model.session?.sheet = .server }
+                .disabled(model.session == nil)
+            Divider()
             Button("Neue Szene") { model.session?.addScene(after: model.session?.selectedSceneID) }
                 .keyboardShortcut("n")
                 .disabled(model.session == nil)

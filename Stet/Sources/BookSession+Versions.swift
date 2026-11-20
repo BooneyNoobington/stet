@@ -8,6 +8,7 @@ extension BookSession {
         case adopt(Experiment)
         case conflicts
         case milestone
+        case server
 
         var id: String {
             switch self {
@@ -15,6 +16,7 @@ extension BookSession {
             case .adopt(let e): "adopt-\(e.branch)"
             case .conflicts: "conflicts"
             case .milestone: "milestone"
+            case .server: "server"
             }
         }
     }
@@ -29,6 +31,10 @@ extension BookSession {
         let branch: String
         let name: String
         var conflicts: [MergeConflict]
+        /// How the two sides are called in the decision window.
+        var mainLabel = "Hauptfassung"
+        var otherLabel = "Experiment"
+        var fromServer = false
         /// Per file: the choice for each conflicting passage (by segment index).
         var passages: [String: [Int: Choice]] = [:]
         /// Per file, for whole-file decisions (deleted on one side, or not mergeable as text).
@@ -122,6 +128,7 @@ extension BookSession {
             try await book.startExperiment(named: name, carryChanges: carryChanges)
             await reloadAfterVersionChange()
             showToast(Toast(message: "Experiment „\(branchName)“ gestartet"))
+            scheduleSync()
         }
     }
 
@@ -141,6 +148,7 @@ extension BookSession {
             try await book.shelve(experiment.branch)
             if wasCurrent { await reloadAfterVersionChange() } else { await refreshVersions() }
             showToast(Toast(message: "„\(experiment.name)“ abgelegt"))
+            scheduleSync()
         }
     }
 
@@ -165,6 +173,7 @@ extension BookSession {
             case .adopted:
                 await reloadAfterVersionChange()
                 showToast(Toast(message: "Experiment „\(experiment.name)“ übernommen"))
+                scheduleSync()
             case .nothingNew:
                 await reloadAfterVersionChange()
                 showToast(Toast(message: "Alles aus „\(experiment.name)“ ist schon in der Hauptfassung"))
@@ -181,12 +190,15 @@ extension BookSession {
             try await book.adoptScenes(ids, from: experiment.branch)
             await reloadAfterVersionChange()
             showToast(Toast(message: ids.count == 1 ? "Szene übernommen" : "\(ids.count) Szenen übernommen"))
+            scheduleSync()
         }
     }
 
     func resumeAdoptionIfNeeded() async {
         guard let info = await book.adoptionInProgress(), let conflicts = try? await book.currentConflicts() else { return }
-        adoption = Adoption(branch: info.branch, name: info.name, conflicts: conflicts)
+        adoption = info.fromServer
+            ? Adoption(branch: info.branch, name: info.name, conflicts: conflicts, mainLabel: "Dieser Mac", otherLabel: "Server", fromServer: true)
+            : Adoption(branch: info.branch, name: info.name, conflicts: conflicts)
     }
 
     func choose(_ choice: Adoption.Choice, for conflict: MergeConflict, passage index: Int) {
@@ -209,7 +221,13 @@ extension BookSession {
             self.adoption = nil
             sheet = nil
             await reloadAfterVersionChange()
-            showToast(Toast(message: "Experiment „\(adoption.name)“ übernommen"))
+            if adoption.fromServer {
+                syncState = .done(Date())
+                showToast(Toast(message: "Mit dem Server zusammengeführt"))
+            } else {
+                showToast(Toast(message: "Experiment „\(adoption.name)“ übernommen"))
+            }
+            scheduleSync()
         }
     }
 
@@ -231,6 +249,7 @@ extension BookSession {
             let milestone = try await book.setMilestone(name: name, note: note)
             await reloadAfterVersionChange()
             showToast(Toast(message: "Meilenstein „\(milestone?.name ?? name)“ gesetzt"))
+            scheduleSync()
         }
     }
 

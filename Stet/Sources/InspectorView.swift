@@ -90,6 +90,16 @@ private struct DetailsForm: View {
                     set: { value in session.updateBook { $0.language = value } }
                 ))
                 LabeledContent("Wörter", value: session.totalWords.formatted())
+                LabeledContent("Server") {
+                    HStack {
+                        Text(session.serverURL.map(shortServer) ?? "–")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(session.serverURL ?? "Kein Server eingerichtet")
+                        Button(session.isConnected ? "Ändern …" : "Einrichten …") { session.sheet = .server }
+                            .controlSize(.small)
+                    }
+                }
             }
         }
         .formStyle(.grouped)
@@ -225,4 +235,13 @@ struct ComparisonView: View {
         }
         return result
     }
+}
+
+/// "git@git.example.org:name/buch.git" → "git.example.org: name/buch"
+private func shortServer(_ url: String) -> String {
+    var text = url
+    for prefix in ["ssh://", "https://", "http://"] where text.hasPrefix(prefix) { text.removeFirst(prefix.count) }
+    if let at = text.firstIndex(of: "@") { text = String(text[text.index(after: at)...]) }
+    if text.hasSuffix(".git") { text.removeLast(4) }
+    return text
 }

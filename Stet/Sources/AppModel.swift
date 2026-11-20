@@ -17,6 +17,7 @@ final class AppModel: ObservableObject {
     @Published var busyMessage: String?
     @Published var errorMessage: String?
     @Published var importReport: Importer.Report?
+    @Published var showCloneSheet = false
 
     private static let recentKey = "RecentBooks"
 
@@ -126,6 +127,28 @@ final class AppModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    // MARK: Fetching a book from a server
+
+    func showCloneDestinationPanel(for url: String, key: SSHKey? = nil) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.stetBook]
+        let name = URL(fileURLWithPath: url.replacingOccurrences(of: ":", with: "/")).deletingPathExtension().lastPathComponent
+        panel.nameFieldStringValue = name.isEmpty ? "Buch" : name
+        panel.message = "Wohin soll das Buch? Am besten in einen Ordner, den kein Sync-Dienst verwaltet."
+        panel.prompt = "Holen"
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        Task {
+            busyMessage = "Buch wird vom Server geholt …"
+            defer { busyMessage = nil }
+            do {
+                let book = try await Book.clone(from: url, to: destination, key: key)
+                await open(book.url)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

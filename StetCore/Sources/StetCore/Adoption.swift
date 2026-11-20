@@ -210,19 +210,27 @@ public enum AdoptionResult: Equatable {
 extension Book {
     private var adoptionMarkerURL: URL { url.appendingPathComponent(".git/STET_ADOPTING") }
 
-    /// The experiment being adopted, if an adoption was started and not yet finished or cancelled.
-    public func adoptionInProgress() async -> (branch: String, name: String)? {
+    /// What is being merged, if a merge (adoption or server sync) was started and not yet finished
+    /// or cancelled. `fromServer` is true when the main version is being merged with the server's.
+    public func adoptionInProgress() async -> (branch: String, name: String, fromServer: Bool)? {
         guard await git.resolve("MERGE_HEAD") != nil else { return nil }
-        let branch = (try? String(contentsOf: adoptionMarkerURL, encoding: .utf8))?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
-        return (branch, await displayName(ofBranch: branch))
+        let marker = (try? String(contentsOf: adoptionMarkerURL, encoding: .utf8)) ?? "?"
+        let branch = marker.split(separator: "\n").first.map(String.init) ?? "?"
+        let fromServer = branch.hasPrefix(Self.remoteName + "/")
+        return (branch, fromServer ? "Server" : await displayName(ofBranch: branch), fromServer)
     }
 
-    /// Merges `branch` into the main version. Pending changes are saved as versions first.
+    /// Merges an experiment into the main version. Pending changes are saved as versions first.
     /// Structure (manuscript.yaml) is merged by Stet; what's left for the writer comes back as conflicts.
     public func adopt(_ branch: String) async throws -> AdoptionResult {
-        guard await adoptionInProgress() == nil else { throw ExperimentError.adoptionInProgress }
         guard await git.resolve("refs/heads/\(branch)") != nil else { throw ExperimentError.noSuchVersion(branch) }
+        return try await merge(branch)
+    }
+
+    /// Merges `ref` (a local branch, or the server's main version) into the main version.
+    func merge(_ branch: String) async throws -> AdoptionResult {
+        guard await adoptionInProgress() == nil else { throw ExperimentError.adoptionInProgress }
+        guard await git.resolve(branch) != nil else { throw ExperimentError.noSuchVersion(branch) }
         let main = await mainBranch()
         if await currentBranch() != main { try await switchTo(main) } else { _ = try await saveVersion() }
 
@@ -389,7 +397,9 @@ extension Book {
         }
 
         let tip = await git.resolve("MERGE_HEAD") ?? ""
-        let message = "Experiment „\(info.name)“ übernommen\n\nStet-Words: \(totalWords())\nStet-Adopted-From: \(info.branch) \(tip)\n"
+        let message = info.fromServer
+            ? "Mit dem Server zusammengeführt\n\nStet-Words: \(totalWords())\nStet-Merged-From: \(info.branch) \(tip)\n"
+            : "Experiment „\(info.name)“ übernommen\n\nStet-Words: \(totalWords())\nStet-Adopted-From: \(info.branch) \(tip)\n"
         let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet")
         try await git.run(["add", "--all"])
         try await git.run(identity + ["commit", "--quiet", "--file=-"], input: Data(message.utf8))
