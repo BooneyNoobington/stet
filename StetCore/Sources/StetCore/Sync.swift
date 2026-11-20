@@ -299,15 +299,21 @@ extension Book {
         }
     }
 
+    /// Notes that travel with the book: version notes and timestamp records.
+    static let syncedNotes = ["refs/notes/commits", Book.stampNotesRef]
+
+    /// Both sides' lines are kept (every line of a note stands on its own).
     private func mergeNotes() async throws {
-        let theirs = "refs/notes/\(Self.remoteName)/commits"
-        guard let remoteNotes = await git.resolve(theirs) else { return }
-        guard await git.resolve("refs/notes/commits") != nil else {
-            try await git.run(["update-ref", "refs/notes/commits", remoteNotes])
-            return
+        let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet", sign: false)
+        for ours in Self.syncedNotes {
+            let theirs = "refs/notes/\(Self.remoteName)/" + ours.dropFirst("refs/notes/".count)
+            guard let remoteNotes = await git.resolve(theirs) else { continue }
+            guard await git.resolve(ours) != nil else {
+                try await git.run(["update-ref", ours, remoteNotes])
+                continue
+            }
+            try await git.run(identity + ["notes", "--ref=\(ours)", "merge", "--quiet", "--strategy=cat_sort_uniq", theirs], allowedStatus: [0, 1])
         }
-        let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet")
-        try await git.run(identity + ["notes", "merge", "--quiet", "--strategy=cat_sort_uniq", theirs], allowedStatus: [0, 1])
     }
 
     private func push(device: String, result: inout SyncResult) async throws {
@@ -333,7 +339,7 @@ extension Book {
             }
         }
         specs.append("refs/tags/*:refs/tags/*")
-        if await git.resolve("refs/notes/commits") != nil { specs.append("refs/notes/commits:refs/notes/commits") }
+        for notes in Self.syncedNotes where await git.resolve(notes) != nil { specs.append("\(notes):\(notes)") }
         let snapshot = Self.snapshotRef(device: device)
         if await git.resolve(snapshot) != nil { specs.append("+\(snapshot):\(snapshot)") }
 

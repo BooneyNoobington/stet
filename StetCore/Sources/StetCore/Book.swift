@@ -200,12 +200,14 @@ extension Book {
         var structureChanged = false
         var feedbackChanged = false
         var wikiChanged = false
+        var signersChanged = false
         var touchedScenes: [String] = []
 
         for path in Set(changed).sorted() {
             if path == Manifest.fileName { structureChanged = true; continue }
             if path.hasPrefix(FeedbackEntry.folder + "/") { feedbackChanged = true; continue }
             if path.hasPrefix(WikiEntry.folder + "/") { wikiChanged = true; continue }
+            if path.hasPrefix(Self.signersFolder + "/") { signersChanged = true; continue }
             guard path.hasPrefix(Self.scenesFolder + "/"), path.hasSuffix(".md") else { continue }
             let id = String(path.dropFirst(Self.scenesFolder.count + 1).dropLast(3))
             touchedScenes.append(id)
@@ -229,6 +231,7 @@ extension Book {
         if structureChanged { parts.append("Struktur geändert") }
         if feedbackChanged { parts.append("Feedback") }
         if wikiChanged { parts.append("Wiki") }
+        if signersChanged { parts.append("Signatur-Schlüssel") }
         if parts.isEmpty { parts.append("Sonstige Änderungen") }
         if let customSubject { parts = [customSubject] }
         if delta != 0 { parts.append(Self.signed(delta) + " Wörter") }
@@ -282,7 +285,7 @@ extension Book {
         if let previous, (try? await git.run(["merge-base", "--is-ancestor", head, previous], allowedStatus: [0, 1]))?.status == 0 {
             parent = previous
         }
-        let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet")
+        let identity = await git.identityArguments(fallbackName: manifest.authors.first ?? "Stet", sign: false)
         let commit = try await git.run(
             identity + ["commit-tree", tree, "-p", parent, "-F", "-"],
             input: Data("Schnappschuss\n\nStet-Snapshot: \(device)\n".utf8)

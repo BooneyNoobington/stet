@@ -2,6 +2,7 @@ import AppKit
 import PDFKit
 import Foundation
 import StetCore
+import SwiftUI
 
 /// Automated checks against the real app, WebKit and git. Both print a JSON report and exit
 /// (0 = all checks passed). Neither prints any manuscript text.
@@ -20,6 +21,14 @@ enum SelfTest {
     static func startIfRequested() {
         let args = CommandLine.arguments
         isRunning = args.contains("--selftest") || args.contains("--selftest-book") || args.contains("--selftest-window")
+        if isRunning {
+            // Never the user's key or the real timestamp services in a self-test (memory only).
+            MainActor.assumeIsolated {
+                ProofSettings.shared.beginTemporary(signing: nil, timestamps: false, authorities: [], client: TimestampClient(transport: { _, _ in
+                    throw URLError(.cancelled)
+                }))
+            }
+        }
         if args.contains("--selftest") {
             armWatchdog()
             Task { @MainActor in
@@ -54,11 +63,45 @@ enum SelfTest {
     private static func armWatchdog(seconds: Double = 30) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
             print(#"{"ok": false, "failures": ["timeout"]}"#)
+            removeTemporaryFolders()
             exit(2)
         }
     }
 
+    /// Temporary folders (with a copy of the imported manuscript) to delete before exiting:
+    /// `exit()` skips `defer`, so every way out removes them explicitly.
+    private static var temporaryFolders: [URL] = []
+
+    private static func temporaryFolder(_ prefix: String) -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        temporaryFolders.append(url)
+        return url
+    }
+
+    private static func removeTemporaryFolders() {
+        for url in temporaryFolders { try? FileManager.default.removeItem(at: url) }
+        temporaryFolders.removeAll()
+    }
+
+    /// Runs a command-line tool; stdout and stderr together (the self-test only looks for markers).
+    private static func runTool(_ path: String, _ arguments: [String], input: URL? = nil, in folder: URL) -> (status: Int32, output: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
+        process.currentDirectoryURL = folder
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        process.standardInput = input.flatMap { try? FileHandle(forReadingFrom: $0) } ?? FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return (-1, "") }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
     private static func finish(_ report: [String: Any], failures: [String]) -> Never {
+        removeTemporaryFolders()
         var report = report
         report["failures"] = failures
         report["ok"] = failures.isEmpty
@@ -129,7 +172,7 @@ enum SelfTest {
             if !ok { failures.append(name) }
         }
         let fm = FileManager.default
-        let work = fm.temporaryDirectory.appendingPathComponent("StetWindowTest-\(UUID().uuidString)")
+        let work = temporaryFolder("StetWindowTest")
         try? fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
 
@@ -202,6 +245,7 @@ enum SelfTest {
         }
 
         // Optional: snapshot a sheet (e.g. --sheet server), then close it.
+        var standalone: NSWindow?
         if let flag = CommandLine.arguments.firstIndex(of: "--sheet"), CommandLine.arguments.indices.contains(flag + 1),
            let session = model.session
         {
@@ -218,18 +262,43 @@ enum SelfTest {
                 _ = session.createWiki(title: "Leuchtfeuer", kind: .term)
                 model.openWiki(mara?.id)
             case "export": session.sheet = .export
+            case "settings", "signing":
+                // Example values only (never this Mac's keys or certificates on a picture).
+                let example = SigningSetup(method: .stetKey(path: "/dev/null"), label: "Stet-Schlüssel dieses Macs",
+                                           fingerprint: "SHA256:k3PqBeispielFingerabdruck0123456789abcdefXYZ")
+                ProofSettings.shared.beginTemporary(signing: example, timestamps: true, authorities: TimestampAuthority.defaults,
+                                                    client: TimestampClient(transport: { _, _ in throw URLError(.cancelled) }))
+                let discovery = SigningDiscovery(options: [
+                    SigningOption(kind: .stetKey, title: "Stet-Schlüssel für diesen Mac", detail: "wird beim Einrichten angelegt (MacBook)", setup: nil),
+                    SigningOption(kind: .smime, title: "S/MIME: Erika Mustermann (erika@example.com)", detail: "ausgestellt von Beispiel CA · gültig bis 01.06.27",
+                                  setup: SigningSetup(method: .smime(program: "/x", certificateID: "1"), label: "S/MIME: Erika", fingerprint: "1", email: "erika@example.com")),
+                    SigningOption(kind: .sshAgent, title: "Secretive: Schreibtisch-Mac", detail: "SHA256:Beispiel0123456789",
+                                  setup: SigningSetup(method: .sshAgent(socket: "/x", publicKey: "x"), label: "Secretive", fingerprint: "2")),
+                ], hasSmimesign: true)
+                let root: AnyView = CommandLine.arguments[flag + 1] == "settings"
+                    ? AnyView(ProofSettingsView(settings: .shared).frame(width: 600, height: 640))
+                    : AnyView(SigningSetupSheet(settings: .shared, preview: discovery))
+                let extra = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 640), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+                extra.title = "Stet-Selbsttest"
+                extra.isReleasedWhenClosed = false
+                extra.contentView = NSHostingView(rootView: root)
+                extra.setContentSize(extra.contentView?.fittingSize ?? NSSize(width: 600, height: 640))
+                extra.center()
+                extra.makeKeyAndOrderFront(nil)
+                standalone = extra
             case "server-key":
                 _ = await session.createKey()
                 session.sheet = .server
             default: break
             }
             try? await Task.sleep(for: .seconds(1.5))
-            if let folder, let sheetWindow = window.attachedSheet ?? NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix("Wiki") }),
+            if let folder, let sheetWindow = standalone ?? window.attachedSheet ?? NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix("Wiki") }),
                let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(sheetWindow.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
             {
                 try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
                 try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("sheet.png"))
             }
+            standalone?.close()
             await session.removeKey()
             session.sheet = nil
             try? await Task.sleep(for: .seconds(0.5))
@@ -314,10 +383,19 @@ enum SelfTest {
         }
 
         let fm = FileManager.default
-        let work = fm.temporaryDirectory.appendingPathComponent("StetSelfTest-\(UUID().uuidString)")
+        let work = temporaryFolder("StetSelfTest")
         try? fm.createDirectory(at: work, withIntermediateDirectories: true)
         let destination = work.appendingPathComponent("Selbsttest.stet")
         defer { try? fm.removeItem(at: work) }
+
+        // Signatures and timestamps only ever with a throwaway key and a local authority: nothing
+        // derived from the manuscript reaches a real service, and the user's settings stay as they are.
+        SSHKey.folder = work.appendingPathComponent("Keys")
+        let localTSA = try? LocalTestTSA(in: work.appendingPathComponent("TSA"))
+        check(localTSA != nil, "localTimestampAuthority")
+        let offline = TimestampClient(transport: { _, _ in throw URLError(.cancelled) })
+        let testAuthorities = [TimestampAuthority(name: "Test A", url: "http://a.test"), TimestampAuthority(name: "Test B", url: "http://b.test")]
+        ProofSettings.shared.beginTemporary(signing: nil, timestamps: localTSA != nil, authorities: testAuthorities, client: localTSA?.client ?? offline)
 
         await editor.waitUntilReady()
         let sourceGit = Git(directory: source)
@@ -690,6 +768,83 @@ enum SelfTest {
             check(mergedRemote == mergedLocal, "mergeSentToServer")
             let afterMerge = try? await other.sync(device: "selftest-second")
             check((try? other.readScene(first).body.contains("(dieser Mac)")) == true && afterMerge?.pulledVersions ?? 0 > 0, "secondMacGotTheMerge")
+        }
+
+        // Signatures and timestamps (throwaway key, local authority).
+        func stampsSettled() async {
+            for _ in 0..<60 where session.isStamping || session.pendingStampCount > 0 {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        await stampsSettled()
+        await session.loadProofInfo()
+        let allStamps = session.stamps.values.flatMap { $0 }
+        check(allStamps.contains { $0.kind == .version }, "dailyStampAfterSaving")
+        let milestoneCommit = session.milestones.first { $0.name == "Selbsttest Meilenstein" }?.commit
+        check(milestoneCommit.map { !session.versionStamps($0).isEmpty } == true, "milestoneStamped")
+        let epub = work.appendingPathComponent("Export/Buch.epub")
+        if fm.fileExists(atPath: epub.path) {
+            let found = (try? await book.stamps(forFile: epub)) ?? []
+            check(found.count == testAuthorities.count, "exportedFileStamped")
+            await session.check(file: epub)
+            check(session.proofMessage?.contains("genau die Datei") == true, "fileCheckFindsStamp")
+            session.proofMessage = nil
+        }
+        report["stamps"] = allStamps.count
+
+        if let setup = try? Signing.makeStetKey() {
+            ProofSettings.shared.signing = setup
+            await session.signingChanged()
+            check(!book.signers().isEmpty, "signerRegistered")
+            await editFirstParagraph(" (signiert)")
+            await session.saveVersion()
+            let head = await book.git.headCommit() ?? ""
+            await session.loadSignatures(for: [head])
+            check(session.signatures[head]?.state == .good, "versionSigned")
+            check(((try? await book.git.log(limit: 1).first)?.subject.contains("Signatur-Schlüssel")) == true, "signerKeyInVersion")
+            check(session.signingProblem == nil, "noSigningProblem")
+            await editFirstParagraph(" (Schnappschuss)")
+            await session.persist()
+            let snapshot = try? await book.snapshot(device: "selftest")
+            if let snapshot {
+                let state = await book.signatures(of: [snapshot])[snapshot]?.state
+                check(state == .unsigned, "snapshotUnsigned")
+            }
+
+            await session.stampNow()  // saves the pending change first, then stamps that version
+            await stampsSettled()
+            let stamped = await book.git.headCommit() ?? ""
+            await session.loadSignatures(for: [stamped])
+            check(session.signatures[stamped]?.state == .good && session.versionStamps(stamped).count == testAuthorities.count, "stampNowSignedAndStamped")
+            let proof = await session.writeProof(for: stamped, to: work.appendingPathComponent("Nachweis"), reveal: false)
+            check(proof != nil, "proofWritten")
+            if let proof, let localTSA {
+                let sums = runTool("/usr/bin/shasum", ["-a", "256", "-c", "../Beleg.txt"], in: proof.appendingPathComponent("Buch"))
+                check(sums.status == 0, "proofFilesMatchReceipt")
+                let stampFile = (try? fm.contentsOfDirectory(atPath: proof.path))?.first { $0.hasPrefix("Zeitstempel – ") && $0.hasSuffix(".tsr") }
+                let certificates = stampFile.map { "Zertifikate – " + $0.dropFirst("Zeitstempel – ".count).dropLast(4) + ".pem" }
+                let verify = runTool("/usr/bin/openssl", ["ts", "-verify", "-data", "Beleg.txt", "-in", stampFile ?? "-",
+                                                          "-CAfile", localTSA.caPEM.path, "-untrusted", certificates ?? "-"], in: proof)
+                check(verify.output.contains("Verification: OK"), "proofStampVerifies")
+                let readme = (try? String(contentsOf: proof.appendingPathComponent("LIESMICH.txt"), encoding: .utf8)) ?? ""
+                check(readme.contains("Test A: ") && readme.contains("ssh-keygen -Y verify"), "proofReadme")
+                let signatureCheck = runTool("/usr/bin/ssh-keygen", ["-Y", "verify", "-f", "Schlüssel.allowed_signers", "-I", "autor",
+                                                                    "-n", "stet-nachweis", "-s", "Beleg.txt.sig"],
+                                             input: proof.appendingPathComponent("Beleg.txt"), in: proof)
+                check(signatureCheck.status == 0, "proofSignatureVerifies")
+            }
+
+            // A key that has gone missing: the version is still saved, without signature, and the writer hears about it.
+            ProofSettings.shared.signing = SigningSetup(method: .stetKey(path: work.appendingPathComponent("weg").path), label: "weg", fingerprint: "SHA256:weg")
+            await editFirstParagraph(" (ohne Signatur)")
+            let before = await book.git.headCommit()
+            await session.saveVersion()
+            for _ in 0..<20 where session.signingProblem == nil { try? await Task.sleep(for: .milliseconds(50)) }
+            let after = await book.git.headCommit()
+            check(before != after && session.signingProblem != nil, "missingKeyStillSaves")
+            ProofSettings.shared.signing = nil
+        } else {
+            check(false, "throwawaySigningKey")
         }
 
         // Health and location

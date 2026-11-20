@@ -45,12 +45,39 @@ public final class Git {
     }
 
     /// Runs git with `arguments` in `directory`. Throws on a non-zero exit unless it is in `allowedStatus`.
+    ///
+    /// A call that signs (see `identityArguments`) and fails because of the signature is run
+    /// again unsigned, so a locked agent or a missing key never costs a version;
+    /// `Signing.onFailure` hears about it.
     @discardableResult
     public func run(
         _ arguments: [String],
         input: Data? = nil,
         environment: [String: String] = [:],
-        allowedStatus: Set<Int32> = [0]
+        allowedStatus: Set<Int32> = [0],
+        retryUnsigned: Bool = true
+    ) async throws -> Output {
+        let signs = arguments.contains(Signing.marker)
+        var environment = environment
+        if signs, let signing = Signing.current?.environment {
+            environment.merge(signing) { explicit, _ in explicit }
+        }
+        do {
+            return try await runOnce(arguments, input: input, environment: environment, allowedStatus: allowedStatus)
+        } catch let error as GitError where signs && retryUnsigned {
+            // If it works without the signature, the signature was the problem.
+            guard let output = try? await runOnce(Signing.unsigned(arguments), input: input, environment: environment, allowedStatus: allowedStatus)
+            else { throw error }
+            Signing.onFailure?(Signing.explain(error.stderr))
+            return output
+        }
+    }
+
+    private func runOnce(
+        _ arguments: [String],
+        input: Data?,
+        environment: [String: String],
+        allowedStatus: Set<Int32>
     ) async throws -> Output {
         let directory = directory
         return try await withCheckedThrowingContinuation { continuation in
@@ -155,8 +182,9 @@ public final class Git {
         return paths
     }
 
-    /// Fallback identity when the user has no git name/email configured.
-    public func identityArguments(fallbackName: String) async -> [String] {
+    /// Who makes a version: a fallback identity when the user has no git name/email configured,
+    /// and (unless `sign` is false, e.g. for snapshots) this Mac's signing setup.
+    public func identityArguments(fallbackName: String, sign: Bool = true) async -> [String] {
         let name = try? await run(["config", "user.name"], allowedStatus: [0, 1])
         let email = try? await run(["config", "user.email"], allowedStatus: [0, 1])
         var args: [String] = []
@@ -166,6 +194,7 @@ public final class Git {
         if email?.status != 0 || email?.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
             args += ["-c", "user.email=stet@localhost"]
         }
+        if sign, let signing = Signing.current { args += signing.gitArguments }
         return args
     }
 
@@ -186,6 +215,24 @@ public final class Git {
               output.status == 0
         else { return nil }
         return output.data
+    }
+
+    /// Contents of blobs by object id (one `cat-file --batch` for all of them).
+    func blobs(_ ids: [String]) async throws -> [String: Data] {
+        guard !ids.isEmpty else { return [:] }
+        let output = try await run(["cat-file", "--batch"], input: Data((ids.joined(separator: "\n") + "\n").utf8))
+        let bytes = [UInt8](output.data)
+        var result: [String: Data] = [:]
+        var index = 0
+        while index < bytes.count {
+            guard let newline = bytes[index...].firstIndex(of: 0x0a) else { break }
+            let header = String(decoding: bytes[index..<newline], as: UTF8.self).split(separator: " ")
+            index = newline + 1
+            guard header.count == 3, let size = Int(header[2]), index + size <= bytes.count else { continue }
+            result[String(header[0])] = Data(bytes[index..<(index + size)])
+            index += size + 1
+        }
+        return result
     }
 
     public func refs(matching pattern: String) async -> [String] {

@@ -257,6 +257,7 @@ extension BookSession {
             await reloadAfterVersionChange()
             showToast(Toast(message: "Meilenstein „\(milestone?.name ?? name)“ gesetzt"))
             scheduleSync()
+            Task { await milestoneSet() }
         }
     }
 

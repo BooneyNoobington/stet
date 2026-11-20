@@ -37,6 +37,13 @@ targets:
         LSMinimumSystemVersion: "14.0"
         NSPrincipalClass: NSApplication
         CFBundleIconFile: Stet
+        # Timestamp services answer over plain http (their replies are signed); only these two.
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            timestamp.digicert.com:
+              NSExceptionAllowsInsecureHTTPLoads: true
+            timestamp.sectigo.com:
+              NSExceptionAllowsInsecureHTTPLoads: true
         # .stet books are folders that Finder shows as single files (like .app).
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: local.stet.book

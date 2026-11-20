@@ -102,6 +102,11 @@ struct BookView: View {
                     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
+        .alert("Nachweis", isPresented: Binding(get: { session.proofMessage != nil }, set: { if !$0 { session.proofMessage = nil } })) {
+            Button("OK") { session.proofMessage = nil }
+        } message: {
+            Text(session.proofMessage ?? "")
+        }
         .alert("Fehler", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK") { session.errorMessage = nil }
         } message: {
@@ -208,6 +213,12 @@ struct Banners: View {
                     Button("Verschieben …") { AppModel.shared.moveCurrentBook() }
                         .help("In einen Ordner verschieben, den kein Sync-Dienst verwaltet")
                     Button("Hier lassen") { session.keepInSyncedFolder() }
+                }
+            }
+            if let problem = session.signingProblem {
+                Banner(symbol: "exclamationmark.triangle", text: "Ohne Signatur gesichert:", detail: problem) {
+                    SettingsLink { Text("Signatur prüfen …") }
+                    Button("OK") { session.signingProblem = nil }
                 }
             }
             if let health = session.health {

@@ -17,6 +17,7 @@ extension BookSession {
             await refreshVersions()
             await loadHistory()
             scheduleSync()
+            Task { await exported(result.file) }
             return result
         } catch {
             errorMessage = error.localizedDescription
@@ -37,6 +38,7 @@ struct ExportSheet: View {
     @AppStorage("ExportWordComments") private var wordComments = false
     @AppStorage("ExportSceneTitles") private var sceneTitles = false
     @State private var result: ExportResult?
+    @State private var fileStamps: [StampRecord] = []
 
     private var format: ExportFormat { ExportFormat(rawValue: formatRaw) ?? .pdfManuscript }
     private var quotes: ExportQuotes { ExportQuotes(rawValue: quotesRaw) ?? session.defaultExportQuotes }
@@ -113,6 +115,19 @@ struct ExportSheet: View {
             Text(result.file.lastPathComponent).font(.headline)
             Text(result.stamp.line + ". Im Verlauf markiert.")
                 .foregroundStyle(.secondary)
+            if session.proofs.timestampsOn {
+                HStack {
+                    Label(stampLine, systemImage: "clock.badge.checkmark")
+                        .foregroundStyle(.secondary)
+                        .help(fileStamps.isEmpty ? "" : session.stampText(fileStamps))
+                    Spacer()
+                    Button("Nachweis speichern …") { session.saveProof(forFile: result.file) }
+                        .help("Ein Ordner mit der Datei, ihren Zeitstempeln und einer Anleitung, wie man sie ohne Stet prüft.")
+                }
+                .task(id: session.stamps.values.map(\.count).reduce(0, +)) {
+                    fileStamps = (try? await session.book.stamps(forFile: result.file)) ?? []
+                }
+            }
             HStack {
                 Button("Im Finder zeigen") { NSWorkspace.shared.activateFileViewerSelecting([result.file]) }
                 Spacer()
@@ -124,6 +139,11 @@ struct ExportSheet: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
+    }
+
+    private var stampLine: String {
+        if !fileStamps.isEmpty { return "Zeitstempel: " + fileStamps.map(\.authority).joined(separator: ", ") }
+        return session.isStamping ? "Zeitstempel wird geholt …" : "Zeitstempel folgt, sobald ein Dienst erreichbar ist."
     }
 
     private func chooseDestination() {

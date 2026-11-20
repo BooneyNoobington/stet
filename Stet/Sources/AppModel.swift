@@ -26,6 +26,7 @@ final class AppModel: ObservableObject {
     private static let recentKey = "RecentBooks"
 
     private init() {
+        _ = ProofSettings.shared  // signing setup in place before any book opens
         recentBooks = (UserDefaults.standard.stringArray(forKey: Self.recentKey) ?? [])
             .map { URL(fileURLWithPath: $0) }
             .filter { FileManager.default.fileExists(atPath: $0.path) }

@@ -49,6 +49,15 @@ final class BookSession: ObservableObject {
     @Published var backupWarning: String?
     @Published var wiki: [WikiEntry] = []
     @Published private(set) var sceneFacts: [String: [Fact]] = [:]
+    // Signatures and timestamps
+    @Published var stamps: [String: [StampRecord]] = [:]
+    @Published var signatures: [String: SignatureInfo] = [:]
+    @Published var signerLabels: [String: String] = [:]
+    @Published var pendingStampCount = 0
+    @Published var isStamping = false
+    @Published var stampProblem: String?
+    @Published var signingProblem: String?
+    @Published var proofMessage: String?
 
     @Published private(set) var history: [Book.SceneVersion] = []
     @Published private(set) var isLoadingHistory = false
@@ -120,6 +129,7 @@ final class BookSession: ObservableObject {
         await loadServer()
         if isConnected && adoption == nil { await syncNow() }
         await maybeAutoBackup()
+        await startProofs()
     }
 
     /// Writes everything to disk and takes a snapshot. Called before closing or quitting.
@@ -331,6 +341,7 @@ final class BookSession: ObservableObject {
             lastVersion = try? await book.git.log(limit: 1).first
             scheduleSync()
             Task { await maybeAutoBackup() }
+            Task { await versionSaved() }
             let delta = result.wordsDelta == 0 ? "" : " · \(result.wordsDelta > 0 ? "+" : "")\(result.wordsDelta.formatted()) Wörter"
             showToast(Toast(message: "Version gesichert" + delta, commit: result.commit))
             await loadHistory()
@@ -378,6 +389,7 @@ final class BookSession: ObservableObject {
         isLoadingHistory = true
         history = (try? await book.history(ofScene: id, device: DeviceID.current)) ?? []
         isLoadingHistory = false
+        await loadSignatures(for: history.filter { !$0.isSnapshot }.map(\.commit.hash))
     }
 
     func compare(with version: Book.SceneVersion) async {

@@ -150,6 +150,7 @@ private struct DetailsForm: View {
                             .controlSize(.small)
                     }
                 }
+                ProofRow(session: session)
             }
         }
         .formStyle(.grouped)
@@ -180,7 +181,14 @@ private struct HistoryList: View {
                         Task { await session.compare(with: version) }
                     }
                 )) { version in
-                    HistoryRow(version: version, milestone: session.milestone(at: version.commit.hash)).tag(version.id)
+                    HistoryRow(session: session, version: version, milestone: session.milestone(at: version.commit.hash)).tag(version.id)
+                        .contextMenu {
+                            if !version.isSnapshot {
+                                Button("Nachweis für diese Version …") { session.saveProof(for: version.commit.hash) }
+                                Button("Zeitstempel für diese Version holen") { Task { await session.stampNow(version.commit.hash) } }
+                                    .disabled(!session.proofs.timestampsOn || !session.versionStamps(version.commit.hash).isEmpty)
+                            }
+                        }
                 }
                 .listStyle(.inset)
             }
@@ -189,6 +197,7 @@ private struct HistoryList: View {
 }
 
 private struct HistoryRow: View {
+    let session: BookSession
     let version: Book.SceneVersion
     let milestone: Milestone?
 
@@ -205,6 +214,7 @@ private struct HistoryRow: View {
                         .background(.quaternary, in: Capsule())
                 }
                 Spacer()
+                if !version.isSnapshot { ProofBadges(session: session, commit: version.commit.hash) }
                 if let delta = version.commit.trailers["Stet-Words-Delta"], delta != "0" {
                     Text(delta).font(.caption).monospacedDigit().foregroundStyle(.secondary)
                 }

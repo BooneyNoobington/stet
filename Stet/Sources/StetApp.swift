@@ -18,6 +18,10 @@ struct StetApp: App {
             WikiWindow(model: model)
         }
         .defaultSize(width: 860, height: 620)
+
+        Settings {
+            StetSettingsView()
+        }
     }
 }
 
@@ -76,6 +80,15 @@ struct StetCommands: Commands {
                 .keyboardShortcut("s", modifiers: [.command, .control])
                 .disabled(model.session?.isConnected != true)
             Button("Server …") { model.session?.sheet = .server }
+                .disabled(model.session == nil)
+            Divider()
+            Button("Zeitstempel jetzt holen") { Task { await model.session?.stampNow() } }
+                .disabled(model.session == nil)
+            Button("Nachweis für die letzte Version …") {
+                if let session = model.session, let head = session.lastVersion?.hash { session.saveProof(for: head) }
+            }
+            .disabled(model.session?.lastVersion == nil)
+            Button("Datei prüfen …") { model.session?.chooseFileToCheck() }
                 .disabled(model.session == nil)
             Divider()
             Button("Neue Szene") { model.session?.addScene(after: model.session?.selectedSceneID) }
