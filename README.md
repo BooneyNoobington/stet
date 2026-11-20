@@ -20,7 +20,7 @@ scripts/    build.sh builds build/Stet.app; make-icons.sh re-renders the icons a
 
 ## Requirements
 
-Xcode, Node.js with npm, XcodeGen (`brew install xcodegen`), macOS 14+.
+Xcode, Node.js with npm, XcodeGen (`brew install xcodegen`), macOS 14+. For exporting: Pandoc and Typst (`brew install pandoc typst`).
 
 ## Build and run
 

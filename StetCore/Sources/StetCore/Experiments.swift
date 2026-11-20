@@ -27,6 +27,8 @@ public struct Milestone: Identifiable, Equatable {
     public let commit: String
     public let date: Date
     public var id: String { tag }
+    /// Set automatically by an export (`export/…`), not by the writer.
+    public var isExport: Bool { tag.hasPrefix("export/") }
 }
 
 /// What an experiment changed since it started, for the "adopt" overview.
@@ -243,6 +245,7 @@ extension Book {
             "for-each-ref", "--sort=-creatordate",
             "--format=%(refname:short)%1f%(*objectname)%1f%(objectname)%1f%(creatordate:iso-strict)%1f%(contents:subject)%1f%(contents:body)%1e",
             "refs/tags/" + Self.milestonePrefix.dropLast(),
+            "refs/tags/export",
         ]) else { return [] }
         let formatter = ISO8601DateFormatter()
         return output.string.split(separator: "\u{1e}").compactMap { record in

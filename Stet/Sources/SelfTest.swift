@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 import Foundation
 import StetCore
 
@@ -461,6 +462,29 @@ enum SelfTest {
             await session.shelve(experiment)
         }
         check(session.shelvedExperiments.contains { $0.name == "Selbsttest Experiment" }, "shelved")
+
+        // Export every format (only file facts are reported, never text).
+        var exports: [String: Any] = [:]
+        for format in ExportFormat.allCases where Exporter.missingTools(for: format).isEmpty {
+            let target = work.appendingPathComponent("Export/Buch.\(format.fileExtension)")
+            var options = ExportOptions(format: format, quotes: session.defaultExportQuotes)
+            options.commentsAsAnnotations = format == .docx
+            if let result = await session.export(options, to: target) {
+                let size = ((try? fm.attributesOfItem(atPath: result.file.path)[.size]) as? NSNumber)?.intValue ?? 0
+                var entry: [String: Any] = ["bytes": size, "tag": result.tag]
+                if format == .pdfBook || format == .pdfManuscript, let pdf = PDFDocument(url: result.file) {
+                    entry["pages"] = pdf.pageCount
+                    entry["stampOnPages"] = (pdf.string ?? "").components(separatedBy: "Fassung \(result.stamp.shortCommit)").count - 1
+                }
+                exports[format.rawValue] = entry
+                check(size > 0, "export-\(format.rawValue)")
+            } else {
+                check(false, "export-\(format.rawValue): \(session.errorMessage ?? "")")
+                session.errorMessage = nil
+            }
+        }
+        report["exports"] = exports
+        check(session.milestones.filter(\.isExport).count == exports.count, "exportsMarkedInHistory")
 
         // Server: connect to a local test server; a "second Mac" (a clone) writes, this Mac brings it
         // in; then both change the same passage and the merge goes through the decision window.

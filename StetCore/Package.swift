@@ -12,7 +12,7 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.0.0")
     ],
     targets: [
-        .target(name: "StetCore", dependencies: ["Yams"]),
+        .target(name: "StetCore", dependencies: ["Yams"], resources: [.copy("Resources")]),
         .testTarget(name: "StetCoreTests", dependencies: ["StetCore"]),
     ]
 )

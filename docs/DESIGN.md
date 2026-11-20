@@ -248,14 +248,30 @@ Free-form background …
 
 ## 11. Export
 
-Pipeline: **Stet → combined Markdown → Pandoc → .docx / .odt / ePUB**, and **→ Typst → PDF** (`pandoc --pdf-engine=typst`).
+**Ablage ▸ Exportieren … (⌘E)** or the toolbar button. Formats:
 
-1. Stet assembles the **combined Markdown**: Pandoc YAML metadata (title, author, lang, cover), parts and chapters as headings, scene breaks between scenes, comments removed or converted. This is also the "combined Markdown" export.
-2. Pandoc converts it, using a reference `.docx`, ePUB CSS and Typst templates bundled with Stet.
-3. Presets: **Manuscript** (standard manuscript format for clubs and agents) and **Book** (trim size, running heads, proper hyphenation, no widows or orphans).
-4. **Every export is stamped** with its version: a short ID in the footer and metadata, plus an automatic milestone tag `export/<date>-<preset>`. Feedback on a printout can then be compared against exactly that text.
+| Format | How | Look |
+|---|---|---|
+| PDF – Manuskript | Pandoc → Typst (`Resources/manuscript.typ`) | A4, Times 12 pt, generous line spacing, first-line indent; title page with name and word count; header "Name · Titel · Seite" and the version line in the footer of **every** page |
+| PDF – Buch | Pandoc → Typst (`Resources/book.typ`) | 13.5 × 21 cm, Iowan Old Style 10.5 pt, justified with hyphenation; running heads (author on even pages, chapter on odd pages, none on chapter openings); chapters start on right-hand pages; cover page, title page and imprint with the version |
+| ePUB | Pandoc (epub3) | TOC, cover, the book's own CSS followed by Stet's (`Resources/epub.css`), colophon with the version |
+| Word / ODT | Pandoc with `Resources/reference.docx` | Times 12 pt, 1.5 line spacing, centred "Szenenwechsel" style; version line under the title. Optionally comments/TODOs as real Word comments (author from `@Name:`) |
+| Markdown | Stet itself | the combined Markdown |
 
-Typst ships inside the app (small, Apache-2.0). Pandoc is a Homebrew dependency for v1; Stet detects it and explains if it's missing. Bundling it comes later.
+Pipeline:
+
+1. **Pending changes are saved as a version first**, so the stamp names exactly the text in the file.
+2. **Stet builds a combined Markdown for the target** (`CombinedMarkdown`):
+   - YAML metadata, always quoted so "1.530" or "1984" stay text
+   - parts and chapters as headings
+   - scene breaks per target: a Typst `#scenebreak()`, `<p class="scene-break">⁂</p>`, the Word style "Szenenwechsel", or `* * *`
+   - comments removed, or turned into Pandoc comment spans for docx/odt
+   - optional scene titles
+3. **Typography for the chosen quote style** („“ / »« / “” / unverändert): straight quotes → typographic ones by context, apostrophe ’, ` -- ` → ` – `, `...` → `…`. Same rules as typing in the editor; CriticMarkup and `***` lines are left alone. The writer's text isn't changed, only the export.
+4. **Pandoc runs with `--from=markdown-smart`** and a Lua filter (`Resources/stet.lua`): links without a target become their text, and images whose file is missing become their caption. A real manuscript's early version had `[<!-- … -->]()`, which Typst refuses.
+5. **Every export is tagged** `export/<date>-<format>` (annotated, with the file name). The history shows these marks; the writer's own milestones take precedence.
+
+Tools: Pandoc and Typst from Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`, `PATH`). If one is missing, the sheet says so with the `brew install` line. Bundling them comes later.
 
 ## 12. Backup
 

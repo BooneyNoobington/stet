@@ -160,9 +160,15 @@ private struct HistoryRow: View {
                 }
             }
             if let milestone {
-                Label(milestone.name, systemImage: "flag.fill")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.purple)
+                if milestone.isExport {
+                    Label(milestone.name, systemImage: "square.and.arrow.up")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label(milestone.name, systemImage: "flag.fill")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.purple)
+                }
             }
             if let note = version.commit.note {
                 Text(note).font(.callout)

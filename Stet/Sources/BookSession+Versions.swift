@@ -9,6 +9,7 @@ extension BookSession {
         case conflicts
         case milestone
         case server
+        case export
 
         var id: String {
             switch self {
@@ -17,6 +18,7 @@ extension BookSession {
             case .conflicts: "conflicts"
             case .milestone: "milestone"
             case .server: "server"
+            case .export: "export"
             }
         }
     }
@@ -82,8 +84,9 @@ extension BookSession {
     var shelvedExperiments: [Experiment] { experiments.filter(\.isShelved) }
     var currentExperiment: Experiment? { experiments.first { $0.branch == branch } }
 
+    /// The writer's own milestone at a version (preferred), or an export mark.
     func milestone(at commit: String) -> Milestone? {
-        milestones.first { $0.commit == commit }
+        milestones.first { $0.commit == commit && !$0.isExport } ?? milestones.first { $0.commit == commit }
     }
 
     // MARK: - Refreshing

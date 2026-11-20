@@ -65,6 +65,11 @@ struct BookView: View {
                 }
                 .help("Verlauf dieser Szene")
 
+                Button { session.sheet = .export } label: {
+                    Label("Exportieren", systemImage: "square.and.arrow.up")
+                }
+                .help("Exportieren als PDF, ePUB, Word … (⌘E)")
+
                 Button { showInspector.toggle() } label: {
                     Label("Inspektor", systemImage: "sidebar.right")
                 }
@@ -81,6 +86,7 @@ struct BookView: View {
             case .conflicts: ConflictSheet(session: session)
             case .milestone: MilestoneSheet(session: session)
             case .server: ServerSheet(session: session)
+            case .export: ExportSheet(session: session)
             }
         }
         .overlay {

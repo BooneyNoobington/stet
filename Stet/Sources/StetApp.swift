@@ -44,6 +44,11 @@ struct StetCommands: Commands {
                 .keyboardShortcut("s")
                 .disabled(model.session == nil)
         }
+        CommandGroup(replacing: .importExport) {
+            Button("Exportieren …") { model.session?.sheet = .export }
+                .keyboardShortcut("e")
+                .disabled(model.session == nil)
+        }
         CommandMenu("Buch") {
             Button("Mit dem Server abgleichen") { Task { await model.session?.syncNow() } }
                 .keyboardShortcut("s", modifiers: [.command, .control])
