@@ -23,6 +23,26 @@ extension BookSession {
         syncState = serverURL == nil ? .off : syncState
     }
 
+    /// The login kept in the keychain for an address (its user name; the password stays there).
+    func storedLogin(for url: String) -> ServerLogin? {
+        ServerEndpoint.parse(url).flatMap { ServerLogins.store.login(for: $0) }
+    }
+
+    func forgetLogin(for url: String) {
+        guard let endpoint = ServerEndpoint.parse(url) else { return }
+        try? ServerLogins.store.remove(for: endpoint)
+    }
+
+    /// Creates the repository on a server with only git and SSH. Returns an error message, or nil.
+    func createServerRepository(_ url: String, login: ServerLogin?) async -> String? {
+        do {
+            try await Book.createRepository(at: url, login: login)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     /// Creates a passphrase-less key for this book (see SSHKey). Returns an error message, or nil.
     func createKey() async -> String? {
         do {
@@ -85,21 +105,21 @@ extension BookSession {
         }
     }
 
-    func checkServer(_ url: String) async -> Result<RemoteCheck, Error> {
+    func checkServer(_ url: String, login: ServerLogin? = nil) async -> Result<RemoteCheck, Error> {
         do {
-            return .success(try await book.checkRemote(url))
+            return .success(try await book.checkRemote(url, login: login))
         } catch {
             return .failure(error)
         }
     }
 
     /// Connects and syncs. Returns an error message, or nil on success.
-    func connectServer(_ url: String) async -> String? {
+    func connectServer(_ url: String, login: ServerLogin? = nil) async -> String? {
         await persist()
         isChangingFiles = true
         defer { isChangingFiles = false }
         do {
-            let result = try await book.connect(to: url, device: DeviceID.current)
+            let result = try await book.connect(to: url, device: DeviceID.current, login: login)
             serverURL = await book.remoteURL()
             if result.changedFiles { await reloadAfterVersionChange() }
             syncState = result.needsMerge ? .needsMerge : result.warnings.first.map(SyncState.warning) ?? .done(Date())

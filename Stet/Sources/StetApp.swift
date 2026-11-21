@@ -7,6 +7,10 @@ struct StetApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = AppModel.shared
 
+    init() {
+        SettingsMigration.run()
+    }
+
     var body: some Scene {
         Window("Stet", id: "main") {
             RootView(model: model, editor: model.editor)
@@ -18,6 +22,21 @@ struct StetApp: App {
             WikiWindow(model: model)
         }
         .defaultSize(width: 860, height: 620)
+
+        Window("Stet-Hilfe", id: "help") {
+            HelpWindow()
+        }
+        .defaultSize(width: 860, height: 620)
+
+        Window("Verlauf", id: "graph") {
+            HistoryGraphWindow(model: model)
+        }
+        .defaultSize(width: 760, height: 620)
+
+        Window("Zeitleiste", id: "timeline") {
+            TimelineWindow(model: model)
+        }
+        .defaultSize(width: 820, height: 640)
 
         Window("Statistik", id: "stats") {
             StatsWindow(model: model)
@@ -93,6 +112,9 @@ struct StetCommands: Commands {
             Button("Wiki exportieren …") { model.session?.exportWiki() }
                 .disabled(model.session?.wiki.isEmpty != false)
             Divider()
+            Button("Zeitleiste") { model.openWindowAction?(id: "timeline") }
+                .keyboardShortcut("l", modifiers: [.command, .option])
+                .disabled(model.session == nil)
             Button("Statistik") { model.openWindowAction?(id: "stats") }
                 .keyboardShortcut("i", modifiers: [.command, .option])
                 .disabled(model.session == nil)
@@ -148,6 +170,22 @@ struct StetCommands: Commands {
             Button("Meilenstein setzen …") { model.session?.sheet = .milestone }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
                 .disabled(model.session == nil)
+            Divider()
+            Button("Verlauf zeigen") { model.openWindowAction?(id: "graph") }
+                .keyboardShortcut("y", modifiers: [.command, .option])
+                .disabled(model.session == nil)
+        }
+        CommandGroup(after: .appInfo) {
+            Button("Nach Updates suchen …") { model.updater?.checkForUpdates(nil) }
+                .disabled(model.updater == nil)
+        }
+        CommandGroup(replacing: .help) {
+            Button("Stet-Hilfe") { model.openWindowAction?(id: "help") }
+                .keyboardShortcut("?", modifiers: [.command])
+            Button("Einführung …") { model.showWelcome = true }
+            Button("Beispielbuch öffnen") { Task { await model.openSampleBook() } }
+            Divider()
+            Button("Problem melden …") { model.showProblemReport = true }
         }
         CommandGroup(after: .toolbar) {
             Picker("Schrift", selection: $editor.settings.font) {
@@ -176,6 +214,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         SelfTest.startIfRequested()
+        if !SelfTest.isRunning {
+            AppModel.shared.startUpdater()
+            if !UserDefaults.standard.bool(forKey: AppModel.welcomeShownKey) { AppModel.shared.showWelcome = true }
+        }
     }
 
     /// Double-clicking a .stet book in Finder.

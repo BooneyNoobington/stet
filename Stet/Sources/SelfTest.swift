@@ -3,6 +3,7 @@ import PDFKit
 import Foundation
 import StetCore
 import SwiftUI
+import WebKit
 
 /// Automated checks against the real app, WebKit and git. Both print a JSON report and exit
 /// (0 = all checks passed). Neither prints any manuscript text.
@@ -22,6 +23,8 @@ enum SelfTest {
         let args = CommandLine.arguments
         isRunning = args.contains("--selftest") || args.contains("--selftest-book") || args.contains("--selftest-window")
         if isRunning {
+            // Never the user's keychain for server passwords in a self-test.
+            ServerLogins.store = MemoryLoginStore()
             // Never the user's key or the real timestamp services in a self-test (memory only).
             MainActor.assumeIsolated {
                 ProofSettings.shared.beginTemporary(signing: nil, timestamps: false, authorities: [], client: TimestampClient(transport: { _, _ in
@@ -98,6 +101,38 @@ enum SelfTest {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
+    /// Draws one of Stet's own windows into a PNG. The views draw themselves (no screen capture,
+    /// so no permission and nothing but Stet's window can end up in the picture); web views (the
+    /// editor) render out of process, so their own snapshots are painted on top.
+    @MainActor
+    static func render(_ window: NSWindow, to url: URL) async {
+        guard let root = window.contentView?.superview ?? window.contentView,
+              let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds)
+        else { return }
+        root.cacheDisplay(in: root.bounds, to: rep)
+        var webViews: [WKWebView] = []
+        func collect(_ view: NSView) {
+            if let web = view as? WKWebView { webViews.append(web) }
+            view.subviews.forEach(collect)
+        }
+        collect(root)
+        var layers: [(NSImage, NSRect)] = []
+        for web in webViews where !web.isHiddenOrHasHiddenAncestor && web.bounds.width > 0 {
+            guard let shot = try? await web.takeSnapshot(configuration: nil) else { continue }
+            var frame = web.convert(web.bounds, to: root)
+            if root.isFlipped { frame.origin.y = root.bounds.height - frame.maxY }
+            layers.append((shot, frame))
+        }
+        let image = NSImage(size: root.bounds.size)
+        image.lockFocus()
+        rep.draw(in: root.bounds)
+        for (shot, frame) in layers { shot.draw(in: frame) }
+        image.unlockFocus()
+        guard let tiff = image.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? png.write(to: url)
     }
 
     private static func finish(_ report: [String: Any], failures: [String]) -> Never {
@@ -236,12 +271,9 @@ enum SelfTest {
             ]
         }
         /// The window's real pixels (an app may capture its own windows).
-        func snapshot(_ name: String) {
-            guard let folder,
-                  let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(window.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
-            else { return }
-            try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("\(name).png"))
+        func snapshot(_ name: String) async {
+            guard let folder else { return }
+            await render(window, to: folder.appendingPathComponent("\(name).png"))
         }
 
         // Optional: snapshot a sheet (e.g. --sheet server), then close it.
@@ -262,6 +294,47 @@ enum SelfTest {
                 _ = session.createWiki(title: "Leuchtfeuer", kind: .term)
                 model.openWiki(mara?.id)
             case "export": session.sheet = .export
+            case "timeline":
+                if let sample = try? await SampleBook.create(at: work.appendingPathComponent("Beispiel.stet")) {
+                    await model.open(sample.url)
+                }
+                model.openWindowAction?(id: "timeline")
+                try? await Task.sleep(for: .seconds(2))
+                standalone = NSApp.windows.first { $0.isVisible && $0.title.hasPrefix("Zeitleiste") }
+            case "graph":
+                if let sample = try? await SampleBook.create(at: work.appendingPathComponent("Beispiel.stet")) {
+                    await model.open(sample.url)
+                }
+                model.openWindowAction?(id: "graph")
+                try? await Task.sleep(for: .seconds(2))
+                standalone = NSApp.windows.first { $0.isVisible && $0.title.hasPrefix("Verlauf") }
+            case "welcome":
+                model.showWelcome = true
+                try? await Task.sleep(for: .seconds(1))
+            case "help":
+                model.openWindowAction?(id: "help")
+                try? await Task.sleep(for: .seconds(1.5))
+                standalone = NSApp.windows.first { $0.isVisible && $0.title.hasPrefix("Stet-Hilfe") }
+            case "report":
+                model.showProblemReport = true
+                try? await Task.sleep(for: .seconds(2))
+            case "server-login":
+                // A made-up Raspberry Pi with a password (memory only, see above).
+                let address = "pi@raspi.local:buecher/roman.git"
+                _ = try? await session.book.git.run(["remote", "add", "origin", address])
+                if let endpoint = ServerEndpoint.parse(address) {
+                    try? ServerLogins.store.save(ServerLogin(user: "pi", password: "beispiel"), for: endpoint)
+                }
+                await session.loadServer()
+                session.sheet = .server
+                try? await Task.sleep(for: .seconds(1))
+            case "export-tools":
+                // As on a Mac without Homebrew: no tools anywhere (this process only).
+                ExportTools.folder = work.appendingPathComponent("NoTools")
+                Exporter.searchPaths = []
+                setenv("PATH", "/usr/bin:/bin", 1)
+                session.sheet = .export
+                try? await Task.sleep(for: .seconds(2))
             case "stats":
                 // A made-up writing history (empty versions with word trailers), never the manuscript.
                 var total = session.totalWords
@@ -303,11 +376,11 @@ enum SelfTest {
                 report["wikiTerms"] = ((try? await model.editor.call("return [...document.querySelectorAll('.stet-wiki-term')].map(e => e.textContent)")) as? [String]) ?? []
                 window.makeFirstResponder(model.editor.webView)
                 try? await Task.sleep(for: .seconds(1))
-                snapshot("spelling")
+                await snapshot("spelling")
                 report["editMenu"] = NSApp.mainMenu?.items.first { $0.submenu?.items.contains { $0.action == #selector(NSText.copy(_:)) } == true }?
                     .submenu?.items.map { $0.title } ?? []
                 try? await Task.sleep(for: .seconds(1))
-                snapshot("spelling")
+                await snapshot("spelling")
             case "settings", "signing":
                 // Example values only (never this Mac's keys or certificates on a picture).
                 let example = SigningSetup(method: .stetKey(path: "/dev/null"), label: "Stet-Schlüssel dieses Macs",
@@ -338,11 +411,8 @@ enum SelfTest {
             default: break
             }
             try? await Task.sleep(for: .seconds(1.5))
-            if let folder, let sheetWindow = standalone ?? window.attachedSheet ?? NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix("Wiki") }),
-               let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(sheetWindow.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
-            {
-                try? fm.createDirectory(at: folder, withIntermediateDirectories: true)
-                try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("sheet.png"))
+            if let folder, let sheetWindow = standalone ?? window.attachedSheet ?? NSApp.windows.first(where: { $0.isVisible && $0.title.hasPrefix("Wiki") }) {
+                await render(sheetWindow, to: folder.appendingPathComponent("sheet.png"))
             }
             standalone?.close()
             await session.removeKey()
@@ -363,14 +433,14 @@ enum SelfTest {
         report["fullScreenPrimarySmall"] = window.collectionBehavior.contains(.fullScreenPrimary)
         let before = rows()
         report["navigatorBefore"] = before
-        snapshot("before")
+        await snapshot("before")
 
         window.zoom(nil)
         try? await Task.sleep(for: .seconds(1.5))
         let zoomed = rows()
         report["navigatorZoomed"] = zoomed
         report["frameZoomed"] = "\(window.frame)"
-        snapshot("zoomed")
+        await snapshot("zoomed")
         report["fullScreenPrimaryZoomed"] = window.collectionBehavior.contains(.fullScreenPrimary)
         report["maxSizeZoomed"] = "\(window.maxSize) / content \(window.contentMaxSize)"
         check((zoomed["visibleRows"] as? Int ?? 0) > 0 && (zoomed["visibleRows"] as? Int) == (before["visibleRows"] as? Int), "navigatorSurvivesZoom")
@@ -389,7 +459,7 @@ enum SelfTest {
         report["enteredFullScreen"] = window.styleMask.contains(.fullScreen)
         report["navigatorFullScreen"] = rows()
         report["frameFullScreen"] = "\(window.frame)"
-        snapshot("fullscreen")
+        await snapshot("fullscreen")
         report["windowsFullScreen"] = NSApp.windows.map {
             "\(type(of: $0)) visible=\($0.isVisible) alpha=\($0.alphaValue) level=\($0.level.rawValue) frame=\($0.frame)"
         }
@@ -401,16 +471,14 @@ enum SelfTest {
         report["toolbarVisible"] = window.toolbar?.isVisible ?? false
         report["toolbarItems"] = window.toolbar?.items.count ?? -1
         // In full screen the toolbar lives in its own window; capture that one too (only Stet's own windows).
-        if let folder, let toolbarWindow = NSApp.windows.first(where: { String(describing: type(of: $0)).contains("ToolbarFullScreen") }),
-           let image = CGWindowListCreateImage(.null, .optionIncludingWindow, CGWindowID(toolbarWindow.windowNumber), [.boundsIgnoreFraming, .nominalResolution])
-        {
-            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("fullscreen-toolbar.png"))
+        if let folder, let toolbarWindow = NSApp.windows.first(where: { String(describing: type(of: $0)).contains("ToolbarFullScreen") }) {
+            await render(toolbarWindow, to: folder.appendingPathComponent("fullscreen-toolbar.png"))
         }
         if window.styleMask.contains(.fullScreen) {
             window.toggleFullScreen(nil)
             try? await Task.sleep(for: .seconds(2))
         }
-        snapshot("after")
+        await snapshot("after")
         await model.closeBook()
         finish(report, failures: failures)
     }

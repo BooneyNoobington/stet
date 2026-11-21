@@ -227,8 +227,9 @@ final class SyncTests: TempDirTestCase {
         do {
             try await book.connect(to: temp.appendingPathComponent("gibt-es-nicht.git").path, device: "macA")
             XCTFail("expected an error")
-        } catch SyncError.unreachable(let message) {
-            XCTAssertFalse(message.isEmpty)
+        } catch let error as SyncError {
+            // No repository at that address (Stet can offer to create one on SSH servers).
+            XCTAssertEqual(error, .noRepository)
         }
         let url = await book.remoteURL()
         XCTAssertNil(url)

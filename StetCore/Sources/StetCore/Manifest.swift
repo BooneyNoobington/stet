@@ -46,11 +46,14 @@ public struct Chapter: Equatable, Identifiable {
     public var id: String
     public var title: String
     public var sceneIDs: [String]
+    /// Quick facts for the whole chapter (e.g. "Datum: Juli 1998"); scenes inherit what they don't set.
+    public var facts: [Fact]
 
-    public init(id: String, title: String, sceneIDs: [String] = []) {
+    public init(id: String, title: String, sceneIDs: [String] = [], facts: [Fact] = []) {
         self.id = id
         self.title = title
         self.sceneIDs = sceneIDs
+        self.facts = facts
     }
 }
 
@@ -58,11 +61,14 @@ public struct Part: Equatable, Identifiable {
     public var id: String
     public var title: String
     public var chapters: [Chapter]
+    /// Quick facts for the whole part; its chapters and scenes inherit them.
+    public var facts: [Fact]
 
-    public init(id: String, title: String, chapters: [Chapter] = []) {
+    public init(id: String, title: String, chapters: [Chapter] = [], facts: [Fact] = []) {
         self.id = id
         self.title = title
         self.chapters = chapters
+        self.facts = facts
     }
 }
 
@@ -260,11 +266,11 @@ extension Manifest {
                 }
                 return chapter
             }
-            return .part(Part(id: map["id"]?.string ?? StetID.make(prefix: "p"), title: title, chapters: chapters))
+            return .part(Part(id: map["id"]?.string ?? StetID.make(prefix: "p"), title: title, chapters: chapters, facts: parseFacts(map["facts"])))
         }
         if let title = map["chapter"]?.string {
             let scenes = map["scenes"]?.sequence?.compactMap(\.string) ?? []
-            return .chapter(Chapter(id: map["id"]?.string ?? StetID.make(prefix: "c"), title: title, sceneIDs: scenes))
+            return .chapter(Chapter(id: map["id"]?.string ?? StetID.make(prefix: "c"), title: title, sceneIDs: scenes, facts: parseFacts(map["facts"])))
         }
         throw ManifestError.invalid("Strukturelement ohne 'chapter' oder 'part'")
     }
@@ -290,18 +296,29 @@ extension Manifest {
     private static func node(_ structureNode: StructureNode) -> Node {
         switch structureNode {
         case .chapter(let chapter):
-            return mapping([
-                ("chapter", Node(chapter.title)),
-                ("id", Node(chapter.id)),
-                ("scenes", Node(chapter.sceneIDs.map { Node($0) })),
-            ])
+            var pairs: [(String, Node)] = [("chapter", Node(chapter.title)), ("id", Node(chapter.id))]
+            if let facts = factsNode(chapter.facts) { pairs.append(("facts", facts)) }
+            pairs.append(("scenes", Node(chapter.sceneIDs.map { Node($0) })))
+            return mapping(pairs)
         case .part(let part):
-            return mapping([
-                ("part", Node(part.title)),
-                ("id", Node(part.id)),
-                ("chapters", Node(part.chapters.map { node(.chapter($0)) })),
-            ])
+            var pairs: [(String, Node)] = [("part", Node(part.title)), ("id", Node(part.id))]
+            if let facts = factsNode(part.facts) { pairs.append(("facts", facts)) }
+            pairs.append(("chapters", Node(part.chapters.map { node(.chapter($0)) })))
+            return mapping(pairs)
         }
+    }
+
+    private static func parseFacts(_ node: Node?) -> [Fact] {
+        node?.mapping?.compactMap { pair in
+            guard let key = pair.key.string, let value = pair.value.string else { return nil }
+            return Fact(key, value)
+        } ?? []
+    }
+
+    private static func factsNode(_ facts: [Fact]) -> Node? {
+        let clean = facts.filter { !$0.key.isEmpty && !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !clean.isEmpty else { return nil }
+        return Node(clean.map { (Node($0.key, Tag(.str), .doubleQuoted), Node($0.value, Tag(.str), .doubleQuoted)) })
     }
 
     static func mapping(_ pairs: [(String, Node)]) -> Node {

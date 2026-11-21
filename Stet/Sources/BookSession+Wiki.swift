@@ -182,6 +182,29 @@ extension BookSession {
         return rows
     }
 
+    /// What a scene gets from its chapter or part for this field (shown when its own is empty).
+    func inheritedFact(_ key: String, forScene sceneID: String) -> String? {
+        manifest.effectiveFacts(ofScene: sceneID, own: []).first { $0.key == key }?.displayValue
+    }
+
+    func setChapterFact(_ chapterID: String, _ key: String, to value: String) {
+        updateBook { manifest in
+            manifest.updateChapter(chapterID) { chapter in chapter.facts = Self.setting(key, to: value, in: chapter.facts) }
+        }
+    }
+
+    func setPartFact(_ partID: String, _ key: String, to value: String) {
+        updateBook { manifest in
+            manifest.updatePart(partID) { part in part.facts = Self.setting(key, to: value, in: part.facts) }
+        }
+    }
+
+    private static func setting(_ key: String, to value: String, in facts: [Fact]) -> [Fact] {
+        var result = facts
+        if let index = result.firstIndex(where: { $0.key == key }) { result[index].value = value } else { result.append(Fact(key, value)) }
+        return result.filter { !$0.value.trimmingCharacters(in: .whitespaces).isEmpty }
+    }
+
     func setFact(_ key: String, to value: String) {
         updateCurrentScene { scene in
             var facts = scene.factList

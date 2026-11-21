@@ -35,7 +35,8 @@ extension Manifest {
             return Chapter(
                 id: any.id,
                 title: pick(b?.title ?? any.title, o?.title ?? any.title, t?.title ?? any.title),
-                sceneIDs: mergeList(base: b?.sceneIDs ?? [], ours: o?.sceneIDs ?? [], theirs: t?.sceneIDs ?? [])
+                sceneIDs: mergeList(base: b?.sceneIDs ?? [], ours: o?.sceneIDs ?? [], theirs: t?.sceneIDs ?? []),
+                facts: pick(b?.facts ?? any.facts, o?.facts ?? any.facts, t?.facts ?? any.facts)
             )
         }
 
@@ -49,7 +50,8 @@ extension Manifest {
                 func chapters(_ p: Part?) -> [String: Chapter] { Dictionary((p?.chapters ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }) }
                 let chapterOrder = mergeList(base: bp?.chapters.map(\.id) ?? [], ours: opart?.chapters.map(\.id) ?? [], theirs: tp?.chapters.map(\.id) ?? [])
                 let merged = chapterOrder.compactMap { mergeChapter(chapters(bp)[$0], chapters(opart)[$0], chapters(tp)[$0]) }
-                return .part(Part(id: id, title: pick(bp?.title ?? op.title, opart?.title ?? op.title, tp?.title ?? op.title), chapters: merged))
+                return .part(Part(id: id, title: pick(bp?.title ?? op.title, opart?.title ?? op.title, tp?.title ?? op.title), chapters: merged,
+                                  facts: pick(bp?.facts ?? op.facts, opart?.facts ?? op.facts, tp?.facts ?? op.facts)))
             default:
                 func chapter(_ n: StructureNode?) -> Chapter? { if case .chapter(let c)? = n { return c }; return nil }
                 return mergeChapter(chapter(b[id]), chapter(o[id]), chapter(t[id])).map(StructureNode.chapter)

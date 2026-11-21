@@ -18,8 +18,9 @@ LIBYAML_LICENSE="${LIBYAML_LICENSE:-$(ls /opt/homebrew/Cellar/libyaml/*/License 
   echo
   echo "Stet is licensed under the GNU General Public License v3.0 or later (see LICENSE)."
   echo "Stet.app contains the following components, each under its own license."
-  echo "Pandoc, Typst and git are separate programs that Stet runs if they are installed;"
-  echo "they are not part of Stet."
+  echo "Pandoc (GPL-2.0-or-later), Typst (Apache-2.0) and git are separate programs that Stet runs;"
+  echo "on request Stet downloads Pandoc's and Typst's official releases from their projects."
+  echo "They are not part of Stet."
   echo
   echo "## Editor (bundled into Stet.app/Contents/Resources/Editor)"
   (cd editor && npm ls --omit=dev --all --parseable 2>/dev/null | tail -n +2 | sort -u) | while read -r dir; do
@@ -36,6 +37,16 @@ LIBYAML_LICENSE="${LIBYAML_LICENSE:-$(ls /opt/homebrew/Cellar/libyaml/*/License 
       echo "(No license file in the package; license as declared above.)"
     fi
   done
+  SPARKLE="build/DerivedData/SourcePackages/checkouts/Sparkle"
+  [[ -f "$SPARKLE/LICENSE" ]] || ./scripts/build.sh >/dev/null
+  echo
+  echo "## Sparkle (Stet.app/Contents/Frameworks) – updates"
+  echo
+  echo "$(git -C "$SPARKLE" describe --tags 2>/dev/null || echo "") – MIT, https://sparkle-project.org"
+  echo
+  echo '```'
+  cat "$SPARKLE/LICENSE"
+  echo '```'
   echo
   echo "## Yams (compiled into Stet)"
   echo

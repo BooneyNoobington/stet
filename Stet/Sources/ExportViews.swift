@@ -38,6 +38,7 @@ struct ExportSheet: View {
     @AppStorage("ExportWordComments") private var wordComments = false
     @AppStorage("ExportSceneTitles") private var sceneTitles = false
     @State private var result: ExportResult?
+    @ObservedObject private var installer = ToolInstaller.shared
     @State private var fileStamps: [StampRecord] = []
 
     private var format: ExportFormat { ExportFormat(rawValue: formatRaw) ?? .pdfManuscript }
@@ -89,9 +90,7 @@ struct ExportSheet: View {
 
             let missing = Exporter.missingTools(for: format)
             if !missing.isEmpty {
-                Label("Dafür fehlt \(missing.joined(separator: " und ")). Im Terminal: brew install \(missing.joined(separator: " "))", systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.orange)
-                    .textSelection(.enabled)
+                ToolsNeeded(tools: missing, installer: installer)
             }
 
             Text("Exportiert wird die \(session.branchName == "Hauptfassung" ? "Hauptfassung" : "Fassung „\(session.branchName)“"). Ungesicherte Änderungen werden vorher als Version gesichert, und der Export bekommt eine Markierung im Verlauf – so weißt du später genau, welcher Text in dieser Datei steht.")
@@ -160,5 +159,76 @@ struct ExportSheet: View {
             options.sceneTitles = sceneTitles
             Task { result = await session.export(options, to: url) }
         }
+    }
+}
+
+// MARK: - Pandoc and Typst on demand
+
+/// Downloads Stet's export tools (see ExportTools) and reports progress to the sheet.
+@MainActor
+final class ToolInstaller: ObservableObject {
+    static let shared = ToolInstaller()
+
+    enum State: Equatable {
+        case idle
+        case loading(Double)
+        case failed(String)
+    }
+
+    @Published private(set) var state: State = .idle
+
+    func install(_ tools: [String]) async {
+        state = .loading(0)
+        do {
+            try await ExportTools.install(tools) { fraction in
+                Task { @MainActor in
+                    if case .loading = self.state { self.state = .loading(fraction) }
+                }
+            }
+            state = .idle
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+}
+
+private struct ToolsNeeded: View {
+    let tools: [String]
+    @ObservedObject var installer: ToolInstaller
+
+    private var names: String {
+        tools.map { $0 == "pandoc" ? "Pandoc" : $0 == "typst" ? "Typst" : $0 }.joined(separator: " und ")
+    }
+
+    private var megabytes: String {
+        "\(Int((Double(ExportTools.downloadSize(for: tools)) / 1_000_000).rounded()))\u{00A0}MB"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Für dieses Format braucht Stet \(tools.count == 1 ? "das Programm" : "die Programme") \(names).", systemImage: "arrow.down.circle")
+            Text("Stet lädt \(tools.count == 1 ? "es" : "sie") einmalig von den offiziellen Seiten der Projekte (für diesen Mac \(megabytes)) und prüft, dass \(tools.count == 1 ? "es" : "sie") unverändert \(tools.count == 1 ? "ist" : "sind").")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            switch installer.state {
+            case .loading(let fraction):
+                ProgressView(value: fraction) { Text("Wird geladen …").font(.caption) }
+            case .failed(let message):
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Erneut versuchen") { Task { await installer.install(tools) } }
+            case .idle:
+                Button("\(names) laden") { Task { await installer.install(tools) } }
+                    .controlSize(.large)
+            }
+            Text("Wer Homebrew nutzt, kann stattdessen im Terminal „brew install \(tools.joined(separator: " "))“ eingeben.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
     }
 }

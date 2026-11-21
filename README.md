@@ -20,7 +20,9 @@ scripts/    build.sh builds build/Stet.app; make-icons.sh re-renders the icons a
 
 ## Requirements
 
-Xcode, Node.js with npm, XcodeGen (`brew install xcodegen`), macOS 14+. For exporting: Pandoc and Typst (`brew install pandoc typst`).
+Xcode, Node.js with npm, XcodeGen (`brew install xcodegen`), macOS 14+. For exporting, Pandoc and Typst: Stet offers to download them, or `brew install pandoc typst`.
+
+Releases (DMG/ZIP, signing and notarization): see [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Build and run
 
@@ -58,4 +60,4 @@ The `--selftest-book` check imports the folder into a temporary book and drives 
 
 Stet is free software, licensed under the [GNU General Public License v3.0 or later](LICENSE). Copyright © 2026 Markus Roth.
 
-The app contains third-party components under the MIT license (CodeMirror and Lezer in the editor, Yams with libYAML in the core); their notices are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `scripts/third-party-notices.sh` regenerates after dependency changes. Pandoc, Typst and git are separate programs that Stet runs; they are not part of it.
+The app contains third-party components under the MIT license (CodeMirror and Lezer in the editor, Yams with libYAML in the core, Sparkle for updates); their notices are in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which `scripts/third-party-notices.sh` regenerates after dependency changes. Pandoc, Typst and git are separate programs that Stet runs; on request Stet downloads Pandoc's and Typst's official releases from their projects. They are not part of it.

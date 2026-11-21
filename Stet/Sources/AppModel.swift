@@ -1,10 +1,11 @@
 import AppKit
+import Sparkle
 import SwiftUI
 import StetCore
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let stetBook = UTType(exportedAs: "local.stet.book", conformingTo: .package)
+    static let stetBook = UTType(exportedAs: "io.github.booneynoobington.stet.book", conformingTo: .package)
 }
 
 /// App-wide state: the open book (one at a time), recent books, and the open/create/import flows.
@@ -16,7 +17,18 @@ final class AppModel: ObservableObject {
     @Published private(set) var session: BookSession?
     @Published private(set) var recentBooks: [URL] = []
     @Published var busyMessage: String?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { if let errorMessage { DiagnosticsLog.record(errorMessage) } }
+    }
+    @Published var showWelcome = false
+    /// Sparkle's updater (not in self-tests: they never go online on their own).
+    private(set) var updater: SPUStandardUpdaterController?
+
+    func startUpdater() {
+        guard updater == nil else { return }
+        updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    }
+    @Published var showProblemReport = false
     @Published var importReport: Importer.Report?
     @Published var showCloneSheet = false
     @Published var wikiSelection: String?
@@ -137,7 +149,7 @@ final class AppModel: ObservableObject {
 
     // MARK: Fetching a book from a server
 
-    func showCloneDestinationPanel(for url: String, key: SSHKey? = nil) {
+    func showCloneDestinationPanel(for url: String, key: SSHKey? = nil, login: ServerLogin? = nil) {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.stetBook]
         let name = URL(fileURLWithPath: url.replacingOccurrences(of: ":", with: "/")).deletingPathExtension().lastPathComponent
@@ -149,7 +161,7 @@ final class AppModel: ObservableObject {
             busyMessage = "Buch wird vom Server geholt …"
             defer { busyMessage = nil }
             do {
-                let book = try await Book.clone(from: url, to: destination, key: key)
+                let book = try await Book.clone(from: url, to: destination, key: key, login: login)
                 await open(book.url)
             } catch {
                 errorMessage = error.localizedDescription

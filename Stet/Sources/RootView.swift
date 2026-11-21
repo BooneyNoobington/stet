@@ -36,6 +36,8 @@ struct RootView: View {
             ImportReportView(report: item.report) { model.importReport = nil }
         }
         .sheet(isPresented: $model.showCloneSheet) { CloneSheet(model: model) }
+        .sheet(isPresented: $model.showWelcome) { WelcomeTour(model: model) }
+        .sheet(isPresented: $model.showProblemReport) { ProblemReportSheet() }
         .onAppear { model.openWindowAction = openWindow }
     }
 }
@@ -64,6 +66,12 @@ struct WelcomeView: View {
                 Button("Vom Server holen …") { model.showCloneSheet = true }
             }
             .controlSize(.large)
+            HStack(spacing: 16) {
+                Button("Beispielbuch ansehen") { Task { await model.openSampleBook() } }
+                Button("Einführung") { model.showWelcome = true }
+                Button("Hilfe") { model.openWindowAction?(id: "help") }
+            }
+            .buttonStyle(.link)
 
             if !model.recentBooks.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {

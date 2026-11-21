@@ -71,7 +71,8 @@ private struct DetailsForm: View {
                             TextField(fact.key, text: Binding(
                                 get: { fact.value },
                                 set: { session.setFact(fact.key, to: $0) }
-                            ), prompt: Text("–"))
+                            ), prompt: Text(session.inheritedFact(fact.key, forScene: scene.id) ?? "–"))
+                            .help(session.inheritedFact(fact.key, forScene: scene.id).map { "Leer gelassen gilt „\($0)“ vom Kapitel oder Teil." } ?? "")
                             if let entry = session.wikiEntry(for: fact) {
                                 Button { AppModel.shared.openWiki(entry.id) } label: { Image(systemName: "text.book.closed") }
                                     .buttonStyle(.borderless)
@@ -94,12 +95,27 @@ private struct DetailsForm: View {
                     Text("Felder für alle Szenen legst du unten beim Buch fest.")
                 }
                 if let chapter = session.manifest.chapter(containing: scene.id) {
-                    Section("Kapitel") {
+                    Section {
                         TextField("Titel", text: Binding(
                             get: { chapter.title },
                             set: { session.renameChapter(chapter.id, to: $0) }
                         ))
                         LabeledContent("Szenen", value: "\(chapter.sceneIDs.count)")
+                        GroupFacts(fields: session.manifest.sceneFactFields, facts: chapter.facts) { key, value in
+                            session.setChapterFact(chapter.id, key, to: value)
+                        }
+                    } header: {
+                        Text("Kapitel")
+                    } footer: {
+                        Text("Fakten des Kapitels gelten für alle seine Szenen, die selbst keine haben.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let part = session.manifest.part(containingChapter: chapter.id) {
+                        Section("Teil „\(part.title)“") {
+                            GroupFacts(fields: session.manifest.sceneFactFields, facts: part.facts) { key, value in
+                                session.setPartFact(part.id, key, to: value)
+                            }
+                        }
                     }
                 }
             }
@@ -310,4 +326,20 @@ private func shortServer(_ url: String) -> String {
     if let at = text.firstIndex(of: "@") { text = String(text[text.index(after: at)...]) }
     if text.hasSuffix(".git") { text.removeLast(4) }
     return text
+}
+
+/// Facts of a chapter or part: one row per field of the book.
+private struct GroupFacts: View {
+    let fields: [String]
+    let facts: [Fact]
+    let set: (String, String) -> Void
+
+    var body: some View {
+        ForEach(fields + facts.map(\.key).filter { !fields.contains($0) }, id: \.self) { key in
+            TextField(key, text: Binding(
+                get: { facts.first { $0.key == key }?.value ?? "" },
+                set: { set(key, $0) }
+            ), prompt: Text("–"))
+        }
+    }
 }

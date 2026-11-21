@@ -117,3 +117,27 @@ final class WordsAndWikiTransferTests: TempDirTestCase {
         XCTAssertEqual(book.wikiEntries().count, 2)
     }
 }
+
+/// The sample book offered on first start.
+final class SampleBookTests: TempDirTestCase {
+    func testSampleBookShowsWhatStetCanDo() async throws {
+        let book = try await SampleBook.create(at: temp.appendingPathComponent("Beispiel.stet"))
+        XCTAssertEqual(book.manifest.title, SampleBook.title)
+        XCTAssertEqual(book.manifest.chapters.map(\.title), ["Ankunft", "Gewitter"])
+        XCTAssertEqual(book.manifest.sceneIDs.count, 4)
+        XCTAssertEqual(book.wikiEntries().map(\.title).sorted(), ["Lene", "Seehaus"])
+        let notes = book.manifest.sceneIDs.compactMap { try? book.readScene($0).body }.joined()
+        XCTAssertTrue(notes.contains("{>>TODO:"))
+        XCTAssertTrue(notes.contains("Jemand klopfte"), "the main version keeps its ending")
+        let experiments = try await book.experiments()
+        XCTAssertEqual(experiments.map(\.name), ["Anderes Ende"])
+        let milestones = await book.milestones()
+        XCTAssertEqual(milestones.first?.name, "Erste Fassung")
+        let versions = try await book.git.log()
+        XCTAssertEqual(versions.count, 3)
+        let changed = try await book.git.changedPaths()
+        XCTAssertTrue(changed.isEmpty)
+        let facts = try book.readScene(book.manifest.sceneIDs[1]).factList
+        XCTAssertTrue(facts.contains(Fact("Datum", "Sommer 1978")))
+    }
+}

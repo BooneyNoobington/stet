@@ -23,7 +23,9 @@ final class BookSession: ObservableObject {
     @Published var lastVersion: Git.Commit?
 
     @Published var toast: Toast?
-    @Published var errorMessage: String?
+    @Published var errorMessage: String? {
+        didSet { if let errorMessage { DiagnosticsLog.record(errorMessage) } }
+    }
     @Published private(set) var syncFinding: SyncLocation.Finding?
     @Published private(set) var health: HealthCheck.Report?
 
@@ -59,7 +61,9 @@ final class BookSession: ObservableObject {
     @Published var pendingStampCount = 0
     @Published var isStamping = false
     @Published var stampProblem: String?
-    @Published var signingProblem: String?
+    @Published var signingProblem: String? {
+        didSet { if let signingProblem { DiagnosticsLog.record("Ohne Signatur gesichert: \(signingProblem)") } }
+    }
     @Published var proofMessage: String?
     // Spelling
     var spelling: SpellingChecker?

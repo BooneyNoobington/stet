@@ -34,14 +34,30 @@ public enum SyncError: Error, LocalizedError, Equatable {
     case unreachable(String)
     case unrelatedServer
     case notAStetBook
+    /// The server answers, but there is no repository at this address (yet).
+    case noRepository
+    case cannotCreateRepository(String)
 
     public var errorDescription: String? {
         switch self {
         case .notConnected: "Für dieses Buch ist kein Server eingerichtet."
+        case .noRepository: "Unter dieser Adresse gibt es noch kein Repository."
+        case .cannotCreateRepository(let detail): "Das Repository ließ sich nicht anlegen: \(detail)"
         case .unreachable(let detail): "Der Server ist nicht erreichbar: \(detail)"
         case .unrelatedServer: "Auf dem Server liegt ein anderes Projekt, nicht dieses Buch."
         case .notAStetBook: "Auf dem Server liegt kein Stet-Buch."
         }
+    }
+
+    /// The error for git's output: a missing repository is its own case (Stet may offer to create it).
+    static func from(_ stderr: String) -> SyncError {
+        let text = stderr.lowercased()
+        if text.contains("does not appear to be a git repository") || text.contains("repository not found")
+            || (text.contains("not found") && text.contains("repository"))
+        {
+            return .noRepository
+        }
+        return .unreachable(explain(stderr))
     }
 
     /// Turns git/ssh's English error output into something a writer can act on.
@@ -57,8 +73,10 @@ public enum SyncError: Error, LocalizedError, Equatable {
         if text.contains("host key verification failed") {
             return "Der Server ist diesem Mac noch unbekannt. Einmal im Terminal verbinden (z. B. mit „ssh“) und den Schlüssel bestätigen."
         }
-        if text.contains("permission denied") || text.contains("authentication failed") || text.contains("could not read username") {
-            return "Anmeldung abgelehnt – SSH-Schlüssel bzw. Zugangsdaten für diesen Server prüfen."
+        if text.contains("permission denied") || text.contains("authentication failed") || text.contains("could not read username")
+            || text.contains("could not read password") || text.contains("invalid username or password")
+        {
+            return "Anmeldung abgelehnt – SSH-Schlüssel bzw. Benutzername und Passwort für diesen Server prüfen."
         }
         if text.contains("not found") || text.contains("does not appear to be a git repository") || text.contains("does not exist") {
             return "Unter dieser Adresse gibt es kein Repository. Bei Gitea muss es vorher angelegt sein (gern leer)."
@@ -90,22 +108,53 @@ extension Book {
 
     // MARK: Network environment
 
-    /// SSH must never wait for input: no password prompts, no host-key questions, short timeout.
-    func networkEnvironment() async -> [String: String] {
-        let options = "-o BatchMode=yes -o ConnectTimeout=15"
-        if let custom = ProcessInfo.processInfo.environment["GIT_SSH_COMMAND"], !custom.isEmpty {
-            return ["GIT_SSH_COMMAND": "\(custom) \(options)"]
+    /// The ssh program (tests use a stand-in).
+    static var sshProgram = "ssh"
+    /// With keys: ssh never waits for input (no prompts, no host-key questions), short timeout.
+    static let keySSHOptions = "-o BatchMode=yes -o ConnectTimeout=15"
+    /// With a password: ssh asks Stet (see AskpassServer), once, and trusts a server it meets for
+    /// the first time (but never one whose key changed).
+    static let passwordSSHOptions = "-o BatchMode=no -o NumberOfPasswordPrompts=1 -o PubkeyAuthentication=no "
+        + "-o PreferredAuthentications=keyboard-interactive,password -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15"
+
+    /// The environment for network commands to `address`: with a login (given, or stored for that
+    /// server) git and ssh get user name and password from Stet; otherwise SSH keys, no prompts.
+    static func networkEnvironment(for address: String?, login: ServerLogin? = nil, sshCommand: String? = nil) -> (environment: [String: String], askpass: AskpassServer?) {
+        if let address, let endpoint = ServerEndpoint.parse(address),
+           let login = login ?? ServerLogins.store.login(for: endpoint),
+           let server = try? AskpassServer(login: login)
+        {
+            var environment = server.environment
+            // Only Stet answers; the user's own credential helper would store the password elsewhere.
+            environment["GIT_CONFIG_COUNT"] = "1"
+            environment["GIT_CONFIG_KEY_0"] = "credential.helper"
+            environment["GIT_CONFIG_VALUE_0"] = ""
+            environment["GIT_SSH_COMMAND"] = "\(sshProgram) \(passwordSSHOptions)"
+            return (environment, server)
         }
-        let configured = try? await git.run(["config", "--get", "core.sshCommand"], allowedStatus: [0, 1])
-        let base = configured?.string.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return ["GIT_SSH_COMMAND": "\(base.isEmpty ? "ssh" : base) \(options)"]
+        if let custom = ProcessInfo.processInfo.environment["GIT_SSH_COMMAND"], !custom.isEmpty {
+            return (["GIT_SSH_COMMAND": "\(custom) \(keySSHOptions)"], nil)
+        }
+        let base = sshCommand.flatMap { $0.isEmpty ? nil : $0 } ?? sshProgram
+        return (["GIT_SSH_COMMAND": "\(base) \(keySSHOptions)"], nil)
     }
 
-    func network(_ arguments: [String], allowedStatus: Set<Int32> = [0]) async throws -> Git.Output {
-        let output = try await git.run(arguments, environment: await networkEnvironment(), allowedStatus: Set(0...128))
-        guard allowedStatus.contains(output.status) else {
-            throw SyncError.unreachable(SyncError.explain(output.stderr))
-        }
+    /// The environment for this book's server with SSH keys (its own key if it has one).
+    func networkEnvironment() async -> [String: String] {
+        let configured = try? await git.run(["config", "--get", "core.sshCommand"], allowedStatus: [0, 1])
+        return Self.networkEnvironment(for: nil, sshCommand: configured?.string.trimmingCharacters(in: .whitespacesAndNewlines)).environment
+    }
+
+    /// Runs a network command against `url` (default: the book's server).
+    func network(_ arguments: [String], url: String? = nil, login: ServerLogin? = nil, allowedStatus: Set<Int32> = [0]) async throws -> Git.Output {
+        let address: String?
+        if let url { address = url } else { address = await remoteURL() }
+        let configured = try? await git.run(["config", "--get", "core.sshCommand"], allowedStatus: [0, 1])
+        let (environment, askpass) = Self.networkEnvironment(
+            for: address, login: login, sshCommand: configured?.string.trimmingCharacters(in: .whitespacesAndNewlines))
+        defer { askpass?.stop() }
+        let output = try await git.run(arguments, environment: environment, allowedStatus: Set(0...128))
+        guard allowedStatus.contains(output.status) else { throw SyncError.from(output.stderr) }
         return output
     }
 
@@ -119,13 +168,13 @@ extension Book {
     }
 
     /// Looks at what's on the server without changing anything here (except a temporary ref).
-    public func checkRemote(_ url: String) async throws -> RemoteCheck {
+    public func checkRemote(_ url: String, login: ServerLogin? = nil) async throws -> RemoteCheck {
         let probe = "refs/stet/probe/main"
-        let listing = try await network(["ls-remote", "--heads", url])
+        let listing = try await network(["ls-remote", "--heads", url], url: url, login: login)
         let heads = listing.string.split(separator: "\n").compactMap { $0.split(separator: "\t").last.map(String.init) }
         guard !heads.isEmpty else { return .empty }
         let remoteMain = heads.contains("refs/heads/main") ? "refs/heads/main" : heads.contains("refs/heads/master") ? "refs/heads/master" : heads[0]
-        try await network(["fetch", "--quiet", "--no-tags", url, "+\(remoteMain):\(probe)"])
+        try await network(["fetch", "--quiet", "--no-tags", url, "+\(remoteMain):\(probe)"], url: url, login: login)
         let related = (try? await git.run(["merge-base", "HEAD", probe], allowedStatus: [0, 1]))?.status == 0
         let counts = related
             ? (try await git.run(["rev-list", "--left-right", "--count", "HEAD...\(probe)"]).string
@@ -137,11 +186,17 @@ extension Book {
         return .sameBook(ahead: counts.first ?? 0, behind: counts.last ?? 0, isStetBook: isStet)
     }
 
-    /// Sets the server and syncs. Refuses servers that hold a different project.
+    /// Sets the server and syncs. Refuses servers that hold a different project. With a login,
+    /// it is checked first, then kept in the keychain and its user name put into the address.
     @discardableResult
-    public func connect(to url: String, device: String) async throws -> SyncResult {
-        let check = try await checkRemote(url)
+    public func connect(to address: String, device: String, login: ServerLogin? = nil) async throws -> SyncResult {
+        var url = address
+        let check = try await checkRemote(url, login: login)
         if check == .unrelated { throw SyncError.unrelatedServer }
+        if let login, let endpoint = ServerEndpoint.parse(url) {
+            url = endpoint.address(withUser: login.user)
+            try ServerLogins.store.save(login, for: ServerEndpoint.parse(url) ?? endpoint)
+        }
         if await remoteURL() != nil {
             try await git.run(["remote", "set-url", Self.remoteName, url])
         } else {
@@ -359,14 +414,20 @@ extension Book {
 
     /// Clones a book from a server (for a second Mac). Experiments come along as local branches.
     /// With `key`, that key is used for the clone and for the book's syncing afterwards.
-    public static func clone(from url: String, to destination: URL, key: SSHKey? = nil) async throws -> Book {
+    public static func clone(from address: String, to destination: URL, key: SSHKey? = nil, login: ServerLogin? = nil) async throws -> Book {
         guard !FileManager.default.fileExists(atPath: destination.path) else { throw BookError.alreadyExists(destination) }
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         let parent = Git(directory: destination.deletingLastPathComponent())
-        var probe = try Book.networkProbe(parent)
-        if let key { probe["GIT_SSH_COMMAND"] = key.sshCommand + " -o BatchMode=yes -o ConnectTimeout=15" }
+        var url = address
+        if let login, let endpoint = ServerEndpoint.parse(address) { url = endpoint.address(withUser: login.user) }
+        let environment = networkEnvironment(for: url, login: login, sshCommand: key?.sshCommand)
+        var probe = environment.environment
+        let askpass = environment.askpass
+        defer { askpass?.stop() }
+        if key != nil, login == nil { probe["GIT_SSH_COMMAND"] = (key?.sshCommand ?? "") + " " + keySSHOptions }
         let output = try await parent.run(["clone", "--quiet", url, destination.path], environment: probe, allowedStatus: Set(0...128))
-        guard output.status == 0 else { throw SyncError.unreachable(SyncError.explain(output.stderr)) }
+        guard output.status == 0 else { throw SyncError.from(output.stderr) }
+        if let login, let endpoint = ServerEndpoint.parse(url) { try? ServerLogins.store.save(login, for: endpoint) }
         guard FileManager.default.fileExists(atPath: destination.appendingPathComponent(Manifest.fileName).path) else {
             try? FileManager.default.removeItem(at: destination)
             throw SyncError.notAStetBook
@@ -380,8 +441,38 @@ extension Book {
         return book
     }
 
-    static func networkProbe(_ git: Git) throws -> [String: String] {
-        let custom = ProcessInfo.processInfo.environment["GIT_SSH_COMMAND"] ?? "ssh"
-        return ["GIT_SSH_COMMAND": "\(custom) -o BatchMode=yes -o ConnectTimeout=15"]
+}
+
+// MARK: - Creating the repository on a plain SSH server
+
+extension Book {
+    /// Creates an empty repository at `address` on a server that only has git and SSH (a
+    /// Raspberry Pi, a NAS …), where there is no web page for it: `git init --bare` over SSH.
+    public static func createRepository(at address: String, login: ServerLogin? = nil, sshCommand: String? = nil) async throws {
+        guard let endpoint = ServerEndpoint.parse(address), endpoint.kind == .ssh else {
+            throw SyncError.cannotCreateRepository("Stet kann ein Repository nur über SSH anlegen. Bei Gitea oder GitHub legst du es auf deren Website an.")
+        }
+        let (environment, askpass) = networkEnvironment(for: address, login: login, sshCommand: sshCommand)
+        defer { askpass?.stop() }
+        let command = environment["GIT_SSH_COMMAND"] ?? sshProgram
+        var arguments = command.split(separator: " ").map(String.init)
+        if let port = endpoint.port { arguments += ["-p", String(port)] }
+        arguments.append(endpoint.user.map { "\($0)@\(endpoint.host)" } ?? endpoint.host)
+        arguments.append("git init --bare --quiet --initial-branch=main " + remotePath(endpoint.path, isURL: endpoint.isURL))
+        let result = try await Tools.runAsync(URL(fileURLWithPath: "/usr/bin/env"), arguments, environment: environment)
+        guard result.status == 0 else {
+            let detail = SyncError.explain(result.errors)
+            throw result.errors.lowercased().contains("git: command not found") || result.errors.contains("git: not found")
+                ? SyncError.cannotCreateRepository("Auf dem Server ist git nicht installiert.")
+                : SyncError.cannotCreateRepository(detail)
+        }
+    }
+
+    /// The path for the server's shell: quoted; `~/` stays the home folder.
+    static func remotePath(_ path: String, isURL: Bool) -> String {
+        func quote(_ text: String) -> String { "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        if path.hasPrefix("/~/") { return "~/" + quote(String(path.dropFirst(3))) }
+        if path.hasPrefix("~/") { return "~/" + quote(String(path.dropFirst(2))) }
+        return quote(path)
     }
 }

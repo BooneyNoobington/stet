@@ -1,0 +1,41 @@
+# On every push to main and every pull request: the core tests, the editor's type check,
+# a build of the app, and the editor self-test.
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tools (XcodeGen; Pandoc and Typst for the export tests)
+        run: brew install xcodegen pandoc typst
+
+      - name: Editor
+        working-directory: editor
+        run: |
+          npm ci --no-audit --no-fund
+          npx tsc --noEmit
+          npm run build
+
+      - name: StetCore tests
+        run: swift test --package-path StetCore
+
+      - name: Build the app
+        run: ./scripts/build.sh
+
+      # Needs a window server; GitHub's macOS runners have one, but if this ever fails there
+      # while the core tests pass, look here first.
+      - name: Editor self-test
+        timeout-minutes: 5
+        run: build/Stet.app/Contents/MacOS/Stet --selftest

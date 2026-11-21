@@ -10,6 +10,11 @@ struct ServerSheet: View {
     @State private var check: Result<RemoteCheck, Error>?
     @State private var isWorking = false
     @State private var connectError: String?
+    @State private var useLogin = false
+    @State private var user = ""
+    @State private var password = ""
+    @State private var stored: ServerLogin?
+    @State private var createError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -20,7 +25,12 @@ struct ServerSheet: View {
 
             TextField("Adresse", text: $url, prompt: Text(verbatim: "git@gitea.example.org:name/buch.git"))
                 .textFieldStyle(.roundedBorder)
-                .onChange(of: url) { check = nil; connectError = nil }
+                .onChange(of: url) {
+                    check = nil
+                    connectError = nil
+                    createError = nil
+                    loadStoredLogin()
+                }
                 .onSubmit { Task { await runCheck() } }
             if let suggestion = ServerAddress.suggestionForPortInShortForm(url) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -35,20 +45,40 @@ struct ServerSheet: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Text("SSH oder HTTPS. Mit Port: ssh://git@host:PORT/name/buch.git. Bei SSH muss dein Schlüssel funktionieren und der Server diesem Mac schon einmal begegnet sein (einmal im Terminal verbinden).")
+            Text(verbatim: "SSH oder HTTPS. Mit Port: ssh://git@host:PORT/name/buch.git. Ein Raspberry Pi oder NAS mit git genügt: pi@raspi.local:buecher/roman.git.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            if !trimmed.lowercased().hasPrefix("http") {
-                GroupBox("Anmeldung") {
-                    KeySection(
-                        key: session.stetKey,
-                        create: { await session.createKey() },
-                        remove: { await session.removeKey() }
-                    )
-                    .padding(6)
+            GroupBox("Anmeldung") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !isHTTP {
+                        Picker("Anmeldung", selection: $useLogin) {
+                            Text("SSH-Schlüssel").tag(false)
+                            Text("Benutzername und Passwort").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
+                    if isHTTP || useLogin {
+                        LoginFields(user: $user, password: $password, endpoint: endpoint, stored: stored) {
+                            session.forgetLogin(for: trimmed)
+                            stored = nil
+                            password = ""
+                        }
+                    } else {
+                        KeySection(
+                            key: session.stetKey,
+                            create: { await session.createKey() },
+                            remove: { await session.removeKey() }
+                        )
+                        Text("Mit SSH-Schlüssel muss der Server diesem Mac schon einmal begegnet sein (einmal im Terminal verbinden).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .padding(6)
             }
 
             if let check { checkView(check) }
@@ -70,18 +100,43 @@ struct ServerSheet: View {
                 if isWorking { ProgressView().controlSize(.small) }
                 Button("Abbrechen", role: .cancel) { dismiss() }
                 Button("Prüfen") { Task { await runCheck() } }
-                    .disabled(trimmed.isEmpty || isWorking)
+                    .disabled(trimmed.isEmpty || isWorking || loginIncomplete)
                 Button("Verbinden") { Task { await connect() } }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!canConnect || isWorking)
+                    .disabled(!canConnect || isWorking || loginIncomplete)
             }
         }
         .padding(24)
         .frame(width: 560)
-        .onAppear { url = session.serverURL ?? "" }
+        .onAppear {
+            url = session.serverURL ?? ""
+            loadStoredLogin()
+        }
     }
 
     private var trimmed: String { url.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var endpoint: ServerEndpoint? { ServerEndpoint.parse(trimmed) }
+    private var isHTTP: Bool { endpoint?.kind == .https || endpoint?.kind == .http }
+
+    /// The login to use: the fields, or (password left empty) the one in the keychain.
+    private var login: ServerLogin? {
+        guard isHTTP || useLogin else { return nil }
+        let name = user.trimmingCharacters(in: .whitespaces)
+        let secret = password.isEmpty ? (stored?.user == name ? stored?.password : nil) : password
+        guard !name.isEmpty, let secret, !secret.isEmpty else { return nil }
+        return ServerLogin(user: name, password: secret)
+    }
+
+    /// Password chosen but not filled in (for HTTPS a login is optional: public repositories).
+    private var loginIncomplete: Bool {
+        isHTTP ? (!user.trimmingCharacters(in: .whitespaces).isEmpty && login == nil) : (useLogin && login == nil)
+    }
+
+    private func loadStoredLogin() {
+        stored = session.storedLogin(for: trimmed)
+        if let name = endpoint?.user ?? stored?.user { user = name }
+        if stored != nil { useLogin = true }
+    }
 
     private var canConnect: Bool {
         guard case .success(let result)? = check else { return false }
@@ -109,6 +164,25 @@ struct ServerSheet: View {
         case .success(.unrelated):
             Label("Auf dem Server liegt ein anderes Projekt. Stet verbindet dieses Buch nicht damit.", systemImage: "xmark.octagon")
                 .foregroundStyle(.red)
+        case .failure(let error as SyncError) where error == .noRepository:
+            VStack(alignment: .leading, spacing: 6) {
+                Label("Unter dieser Adresse gibt es noch kein Repository.", systemImage: "questionmark.folder")
+                    .foregroundStyle(.orange)
+                if endpoint?.kind == .ssh {
+                    Text("Auf einem Server mit git und SSH – etwa einem Raspberry Pi – kann Stet es anlegen.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Button("Auf dem Server anlegen") { Task { await createRepository() } }
+                        .disabled(isWorking || loginIncomplete)
+                } else {
+                    Text("Bei Gitea oder GitHub legst du es auf deren Website an (gern leer), dann hier noch einmal prüfen.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                if let createError {
+                    Label(createError, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                }
+            }
         case .failure(let error):
             Label(error.localizedDescription, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
@@ -118,13 +192,20 @@ struct ServerSheet: View {
     private func runCheck() async {
         guard !trimmed.isEmpty else { return }
         isWorking = true
-        check = await session.checkServer(trimmed)
+        check = await session.checkServer(trimmed, login: login)
         isWorking = false
+    }
+
+    private func createRepository() async {
+        isWorking = true
+        createError = await session.createServerRepository(trimmed, login: login)
+        isWorking = false
+        if createError == nil { await runCheck() }
     }
 
     private func connect() async {
         isWorking = true
-        connectError = await session.connectServer(trimmed)
+        connectError = await session.connectServer(trimmed, login: login)
         isWorking = false
         if connectError == nil { dismiss() }
     }
@@ -137,6 +218,19 @@ struct CloneSheet: View {
     @State private var url = ""
     @State private var useOwnKey = false
     @State private var key: SSHKey?
+    @State private var useLogin = false
+    @State private var user = ""
+    @State private var password = ""
+
+    private var endpoint: ServerEndpoint? { ServerEndpoint.parse(url) }
+    private var isHTTP: Bool { endpoint?.kind == .https || endpoint?.kind == .http }
+
+    private var login: ServerLogin? {
+        guard isHTTP || useLogin else { return nil }
+        let name = user.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, !password.isEmpty else { return nil }
+        return ServerLogin(user: name, password: password)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -153,7 +247,18 @@ struct CloneSheet: View {
                     Button("So verwenden") { url = suggestion }.controlSize(.small)
                 }
             }
-            if !url.lowercased().hasPrefix("http") {
+            if !isHTTP {
+                Picker("Anmeldung", selection: $useLogin) {
+                    Text("SSH-Schlüssel").tag(false)
+                    Text("Benutzername und Passwort").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            if isHTTP || useLogin {
+                LoginFields(user: $user, password: $password, endpoint: endpoint, stored: nil, forget: nil)
+                    .onChange(of: url) { if let name = endpoint?.user { user = name } }
+            } else {
                 Toggle("Eigenen Schlüssel für dieses Buch verwenden (ohne Touch ID oder Passwort)", isOn: $useOwnKey)
                 if useOwnKey {
                     GroupBox("Anmeldung") {
@@ -181,12 +286,14 @@ struct CloneSheet: View {
                 Button("Abbrechen", role: .cancel) { dismiss() }
                 Button("Speicherort wählen …") {
                     let address = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                    let chosenKey = useOwnKey ? key : nil
+                    let chosenKey = useOwnKey && !(isHTTP || useLogin) ? key : nil
+                    let chosenLogin = login
                     dismiss()
-                    model.showCloneDestinationPanel(for: address, key: chosenKey)
+                    model.showCloneDestinationPanel(for: address, key: chosenKey, login: chosenLogin)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty || (useOwnKey && key == nil))
+                .disabled(url.trimmingCharacters(in: .whitespaces).isEmpty || (useOwnKey && !useLogin && !isHTTP && key == nil)
+                          || (useLogin && login == nil))
             }
         }
         .padding(24)
@@ -264,6 +371,44 @@ struct KeySection: View {
             Button("Abbrechen", role: .cancel) {}
         } message: {
             Text("Stet löscht den Schlüssel von diesem Mac und meldet sich danach wieder mit deinen üblichen Schlüsseln an. Entferne ihn auch in Gitea bei den Deploy-Schlüsseln des Repositorys.")
+        }
+    }
+}
+
+/// User name and password for a server, and where Stet keeps them.
+struct LoginFields: View {
+    @Binding var user: String
+    @Binding var password: String
+    let endpoint: ServerEndpoint?
+    let stored: ServerLogin?
+    let forget: (() -> Void)?
+
+    private var isHTTP: Bool { endpoint?.kind == .https || endpoint?.kind == .http }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    Text("Benutzername")
+                    TextField("Benutzername", text: $user, prompt: Text(isHTTP ? "dein Name beim Server" : "z. B. pi"))
+                        .labelsHidden()
+                }
+                GridRow {
+                    Text(isHTTP ? "Passwort oder Token" : "Passwort")
+                    SecureField("Passwort", text: $password, prompt: Text(stored != nil ? "im Schlüsselbund gespeichert" : ""))
+                        .labelsHidden()
+                }
+            }
+            .textFieldStyle(.roundedBorder)
+            Text("Stet bewahrt das Passwort im Schlüsselbund dieses Macs auf (Eintrag „Stet – \(endpoint?.host ?? "Server")“) und schickt es nur an diesen Server, nie in eine Datei des Buchs."
+                 + (isHTTP ? " Bei Gitea oder GitHub geht statt des Passworts auch ein Zugangs-Token." : " Beim ersten Verbinden merkt sich der Mac den Server; meldet er sich später mit einem anderen Schlüssel, bricht Stet ab."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if stored != nil, let forget {
+                Button("Gespeichertes Passwort entfernen", role: .destructive, action: forget)
+                    .controlSize(.small)
+            }
         }
     }
 }

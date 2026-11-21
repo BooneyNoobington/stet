@@ -1,7 +1,7 @@
 # XcodeGen spec. Generate the Xcode project with `xcodegen` (scripts/build.sh does it for you).
 name: Stet
 options:
-  bundleIdPrefix: local.stet
+  bundleIdPrefix: io.github.booneynoobington
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -9,11 +9,18 @@ options:
 packages:
   StetCore:
     path: StetCore
+  # Updates outside the App Store (MIT license).
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    majorVersion: 2.6.0
 
 settings:
   base:
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
+    # The one place for the version (scripts/release.sh can override both).
+    MARKETING_VERSION: "0.9.0"
+    CURRENT_PROJECT_VERSION: "1"
 
 targets:
   Stet:
@@ -29,19 +36,27 @@ targets:
         buildPhase: resources
     dependencies:
       - package: StetCore
+      - package: Sparkle
       - target: StetThumbnail
       - target: StetPreview
     info:
       path: Stet/Info.plist
       properties:
         CFBundleDisplayName: Stet
-        CFBundleShortVersionString: "0.2"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleDevelopmentRegion: de
         LSApplicationCategoryType: public.app-category.productivity
         LSMinimumSystemVersion: "14.0"
         NSPrincipalClass: NSApplication
         CFBundleIconFile: Stet
+        # Where "Problem melden" sends its mail; empty: the user fills in the address.
+        StetSupportEmail: ""
+        # Updates (Sparkle): the newest release's appcast.xml, signed with this public key's
+        # private half (in the keychain of the Mac that builds releases; see docs/RELEASING.md).
+        SUFeedURL: https://github.com/BooneyNoobington/stet/releases/latest/download/appcast.xml
+        SUPublicEDKey: hHedyo+31pjNag7UtbIJVHEQh1mT3Bbh5/1KAq9VrUw=
+        SUEnableAutomaticChecks: true
         # Timestamp services answer over plain http (their replies are signed); only these two.
         NSAppTransportSecurity:
           NSExceptionDomains:
@@ -51,7 +66,7 @@ targets:
               NSExceptionAllowsInsecureHTTPLoads: true
         # .stet books are folders that Finder shows as single files (like .app).
         UTExportedTypeDeclarations:
-          - UTTypeIdentifier: local.stet.book
+          - UTTypeIdentifier: io.github.booneynoobington.stet.book
             UTTypeDescription: Stet-Buch
             UTTypeConformsTo: [com.apple.package, public.composite-content]
             UTTypeIconFile: StetBook
@@ -63,10 +78,10 @@ targets:
             LSHandlerRank: Owner
             LSTypeIsPackage: true
             CFBundleTypeIconFile: StetBook
-            LSItemContentTypes: [local.stet.book]
+            LSItemContentTypes: [io.github.booneynoobington.stet.book]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: local.stet.Stet
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.booneynoobington.stet
         PRODUCT_NAME: Stet
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_IDENTITY: "-"
@@ -106,13 +121,13 @@ targets:
       path: Stet/QuickLookThumbnail/Info.plist
       properties:
         CFBundleDisplayName: Stet-Miniaturen
-        CFBundleShortVersionString: "0.2"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.quicklook.thumbnail
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ThumbnailProvider
           NSExtensionAttributes:
-            QLSupportedContentTypes: [local.stet.book]
+            QLSupportedContentTypes: [io.github.booneynoobington.stet.book]
             QLThumbnailMinimumDimension: 0
     entitlements:
       path: Stet/QuickLookThumbnail/StetThumbnail.entitlements
@@ -120,7 +135,7 @@ targets:
         com.apple.security.app-sandbox: true
     settings:
       base: &extensionSettings
-        PRODUCT_BUNDLE_IDENTIFIER: local.stet.Stet.Thumbnail
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.booneynoobington.stet.thumbnail
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
@@ -141,14 +156,14 @@ targets:
       path: Stet/QuickLookPreview/Info.plist
       properties:
         CFBundleDisplayName: Stet-Vorschau
-        CFBundleShortVersionString: "0.2"
-        CFBundleVersion: "1"
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.quicklook.preview
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PreviewProvider
           NSExtensionAttributes:
             QLIsDataBasedPreview: true
-            QLSupportedContentTypes: [local.stet.book]
+            QLSupportedContentTypes: [io.github.booneynoobington.stet.book]
             QLSupportsSearchableItems: false
     entitlements:
       path: Stet/QuickLookPreview/StetPreview.entitlements
@@ -157,4 +172,4 @@ targets:
     settings:
       base:
         <<: *extensionSettings
-        PRODUCT_BUNDLE_IDENTIFIER: local.stet.Stet.Preview
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.booneynoobington.stet.preview

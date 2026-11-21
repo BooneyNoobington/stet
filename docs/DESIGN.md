@@ -20,7 +20,11 @@ Status: Phases 1–4 are built (core, experiments, sync, export, notes & feedbac
 
 - **macOS only** for now. The iPad and other devices get a **web app later**. The editor component is chosen so it can be reused there (see §7).
 - **Direct download + Homebrew tap.** No Mac App Store, no sandbox, so Stet can call the system `git`, `ssh-keygen`, `gpg`, Pandoc and Typst.
-- Builds for other people need Developer ID signing + notarization. Updates via Sparkle.
+- **Releases** (`scripts/release.sh`, details in `docs/RELEASING.md`): Release configuration, Apple silicon + Intel, hardened runtime, as `Stet-<version>.dmg` (drag to Programme) and `.zip`. With the Developer ID and a notary profile the same script signs, notarizes and staples both and asks Gatekeeper; without them it signs ad hoc for testing. The version lives in `project.yml` (`MARKETING_VERSION`); the build number is the commit count. Next: Homebrew cask (template in RELEASING.md).
+- **Updates via Sparkle** (2.x, Swift package): the app checks the newest GitHub release's `appcast.xml` once a day (Einstellungen ▸ Updates, Stet ▸ Nach Updates suchen) and installs only when the user agrees. Updates are EdDSA-signed: public key `SUPublicEDKey` in `project.yml`, private key in the release Mac's keychain; `release.sh` writes the appcast. Self-tests never start the updater. Release builds signed ad hoc need `AdHocRelease.entitlements` (no library validation: without a team ID the hardened runtime would refuse Sparkle.framework); Developer ID builds don't.
+- **Pandoc and Typst on demand** instead of in the app (they would add several hundred MB for both kinds of Mac): when an export needs them, the export sheet offers to download the official release for this Mac from the projects' GitHub pages (pinned versions, the archives checked against SHA-256 digests in `ExportTools.catalog`, the program checked with `--version`) into `~/Library/Application Support/Stet/Tools/<tool>-<version>/`. Stet's own copies come first; Homebrew's or anything on the PATH still work. Stet only causes the download of the projects' own releases and doesn't redistribute them.
+- **Tests on GitHub** (`.github/workflows/tests.yml`): on every push to main and every pull request, the editor's type check and build, the StetCore tests, a build of the app and the editor self-test, on GitHub's macOS runners.
+- The self-tests draw Stet's windows themselves for their pictures (`SelfTest.render`): no screen capture, so no Screen Recording permission and nothing but Stet's own windows.
 
 ## 3. Vocabulary
 
@@ -135,9 +139,12 @@ Rejected: excluding only `.git` from sync. The text would sync and the history w
 
 - **Navigator**: a tree in the style of Typora's sidebar. No file names or icons. Drag and drop to reorder, a quiet word count, and a status dot (draft / revised / done).
 - **Quick facts**: fields defined per book (`factFields` in `manuscript.yaml`, default *Datum, Uhrzeit, Ort, Perspektive*), edited in Inspector ▸ Details per scene, plus extra fields a single scene needs. They are stored in the scene's front matter (empty values aren't written) and shown in the navigator's tooltip. A value can point to a wiki entry (`[[Hafen]]`, or simply a known name); the inspector then offers to open it. Chapter and part facts come later.
-- Later: a **timeline view** plotting story time against reading order, for pacing.
+- **Facts for chapters and parts** (Inspector ▸ Details, under the chapter and its part; `facts:` in `manuscript.yaml`, merged like titles): a scene inherits what it doesn't set itself (scene over chapter over part). An empty scene field shows the inherited value as its placeholder.
+- **Zeitleiste** (Buch ▸ Zeitleiste, ⌥⌘L): every scene's story time from its "Datum" and "Uhrzeit" (own or inherited), read as written: "14.7.1998", "1998-07-14", "14. Juli 1998", "Juli 1998", "Sommer 1978", "3/1953", "1978"; times "23:30", "7 Uhr" (`StoryTime`). A chart plots story time (as a decimal year, later is higher) against reading order, so a flashback is a drop; scenes earlier than the latest one read before them are marked as flashbacks. Below, the scenes in story order (or reading order), undated ones listed apart; a click opens the scene.
 
 ## 6. Saving and history
+
+**Grafischer Verlauf** (Fassung ▸ Verlauf zeigen, ⌥⌘Y): every version of every Fassung (experiments too, shelved ones included), newest at the top, in lanes like a git graph (`HistoryLayout`): the main version always in the first lane, an experiment branching off it and, once adopted, flowing back in (adoptions are hollow dots). Branch tips carry their names, milestones and exports their flags; dates, word changes and notes under each version.
 
 | Action | What happens |
 |---|---|
@@ -285,7 +292,7 @@ Free-form notes …
 
 ## 11. Export
 
-**Ablage ▸ Exportieren … (⌘E)** or the toolbar button. Formats:
+**Ablage ▸ Exportieren … (⌘E)** or the toolbar button. If a format needs Pandoc or Typst and neither Stet's own copy nor Homebrew's is there, the sheet offers to load them (§2). Formats:
 
 | Format | How | Look |
 |---|---|---|
@@ -308,7 +315,7 @@ Pipeline:
 4. **Pandoc runs with `--from=markdown-smart`** and a Lua filter (`Resources/stet.lua`): links without a target become their text, and images whose file is missing become their caption. A real manuscript's early version had `[<!-- … -->]()`, which Typst refuses.
 5. **Every export is tagged** `export/<date>-<format>` (annotated, with the file name). The history shows these marks; the writer's own milestones take precedence.
 
-Tools: Pandoc and Typst from Homebrew (`/opt/homebrew/bin`, `/usr/local/bin`, `PATH`). If one is missing, the sheet says so with the `brew install` line. Bundling them comes later.
+Tools: Stet's own copies of Pandoc and Typst (loaded on demand, see §2), otherwise Homebrew's (`/opt/homebrew/bin`, `/usr/local/bin`) or anything on the `PATH`. If one is missing, the sheet offers to load it.
 
 ## 12. Backup
 
@@ -345,6 +352,12 @@ If a book has a remote (`origin`), **the remote is the source of truth.**
 - **Network**: SSH runs with `BatchMode=yes` and `ConnectTimeout=15`, so it never waits for a password or host-key question. git/ssh errors are translated: unknown host, no connection, unknown host key ("connect once in Terminal"), permission denied, no repository. HTTPS uses the system credential helper.
 - **Second Mac**: "Buch vom Server holen …" clones the book; experiments come along as local branches. Experiment names travel as their slug (`Kapitel-3-aus-Maras-Sicht` → "Kapitel 3 aus Maras Sicht"); real hyphens in names become spaces on the other Mac.
 - **Status bar**: "Server: abgeglichen 14:02 / wird abgeglichen / neue Versionen verfügbar / zusammenführen nötig / nicht erreichbar". Click to sync now (⌃⌘S).
+
+- **Which server**: anything that speaks git. Gitea/Forgejo or GitHub (web page, accounts, HTTPS), or simply git and SSH on a Raspberry Pi or NAS: one bare repository per book. On such a plain server there's no web page to create the repository, so the server sheet offers **Auf dem Server anlegen** when the address is SSH and nothing is there yet (`Book.createRepository`: `git init --bare --initial-branch=main` over SSH).
+- **Logging in with a user name and password** (SSH or HTTPS; for Gitea/GitHub also an access token), as an alternative to SSH keys. The password lives in the keychain as an internet password marked "Stet" (host, protocol, port, user), never in the book or `.git/config`; the address gets the user name (`pi@raspi.local:…`, `https://autorin@…`).
+  - How git and ssh get it: for each network command Stet opens a private Unix socket (in a 0700 temp folder) and points `GIT_ASKPASS` and `SSH_ASKPASS` (`SSH_ASKPASS_REQUIRE=force`) at a two-line script that asks Stet over it, with a one-time token (`AskpassServer`). Stet answers the user name to "Username for …", the password to "… password:", and nothing else (no key passphrases, no guesses). The user's own credential helper is switched off for these commands (`credential.helper=` via `GIT_CONFIG_*`), so the password isn't stored elsewhere. Socket and script are removed when the command ends.
+  - SSH with a password: `BatchMode=no`, one password prompt, no public-key attempts, and `StrictHostKeyChecking=accept-new` (a new server is remembered; one whose key changed is refused). With keys everything stays as before (`BatchMode=yes`).
+  - Checking and connecting use the typed login; only after the server accepted it is it saved. Self-tests keep logins in memory, never in the keychain; the core tests use a throwaway keychain, a local HTTP git server with Basic auth and a stand-in for ssh.
 
 ## 14. Signing and timestamps
 
@@ -385,6 +398,12 @@ Tests run against a local authority (`LocalTestTSA`: `openssl ts -reply` with a 
 - All git access goes through one `GitClient` actor in `StetCore`, so the backend can be swapped.
 - Requires git ≥ 2.34 (SSH signing). Apple Git 2.54 was current at the time of writing.
 
+## 15a. First start, help, problem reports
+
+- **Einführung**: four pages on first start (and Hilfe ▸ Einführung): versions, experiments, notes/wiki/facts, backups/server/export/proofs. The last page offers the **sample book** (`SampleBook`, "Ein Sommer am See", created in Documents): two chapters, four scenes with a flashback, a comment and a TODO, a figure and a place in the wiki, facts, two versions, a milestone and an experiment with another ending – Stet's own text.
+- **Stet-Hilfe** (⌘?): a searchable help window in German, one page per topic, including all keyboard shortcuts.
+- **Problem melden …**: what the user writes, plus technical facts only (versions, tools, settings by kind, the open book in numbers, the last error messages; home folder shortened to "~"), never text from a book; shown in full before it goes out by mail. The recipient is `StetSupportEmail` in `project.yml` (empty until set: the user enters it in Mail). Errors and warnings shown to the user are kept in memory for this (`DiagnosticsLog`, last 30).
+
 ## 16. Architecture
 
 ```
@@ -397,7 +416,7 @@ creative_writing_app/
 └── Stet/          macOS app: SwiftUI shell + WKWebView hosting editor/dist (Xcode project via XcodeGen)
 ```
 
-The Xcode project is generated from `project.yml` by XcodeGen, so it stays reviewable as text. It declares the `.stet` type (`local.stet.book`, conforming to `com.apple.package`). The bundle identifier `local.stet.Stet` is a placeholder until there is a real domain for signing.
+The Xcode project is generated from `project.yml` by XcodeGen, so it stays reviewable as text. The app is `io.github.booneynoobington.stet` (after the GitHub account; the extensions are `….thumbnail` and `….preview`) and declares the `.stet` type `io.github.booneynoobington.stet.book`, conforming to `com.apple.package`. Until November 2026 it was `local.stet.Stet`; on its first start the app copies the old settings once (`SettingsMigration`). The version lives in `MARKETING_VERSION`/`CURRENT_PROJECT_VERSION` in `project.yml`.
 
 ## 17. Roadmap
 
@@ -405,11 +424,10 @@ The Xcode project is generated from `project.yml` by XcodeGen, so it stays revie
 2. **Experiments**: start, switch, adopt (merge UI), adopt scenes, shelve, milestones.
 3. **Comments/TODOs, feedback inbox, export** (combined Markdown, .docx, .odt, ePUB, PDF), backups, server sync.
 4. **Wiki**, quick facts on hover, **signing + timestamps**.
-5. Later: graphical history, timeline view, local LLM (commit summaries), web app for iPad. (Statistics from trailers and `.docx` comment import are built.)
+5. Later: local LLM (commit summaries), English user interface, suggested edits (`{++ ++}`, `{-- --}`), glossary export from the wiki, web app for iPad. (Statistics, `.docx` comment import, timeline and graphical history are built.)
 
 ## 18. Open questions
 
 - Are custom refs (`refs/stet/snapshots/*`, `refs/notes/*`) accepted and kept by Gitea on push? If not, snapshots stay local or use a hidden branch prefix.
 - Author attribution in comments: is the `@Name:` prefix enough, or are structured comment IDs needed for feedback linking?
 - Manuscript-format details (font, spacing, header) for the club.
-- Whether to bundle Pandoc in a later version, or keep it as a dependency.

@@ -9,6 +9,8 @@ struct StetSettingsView: View {
         TabView {
             ProofSettingsView(settings: .shared)
                 .tabItem { Label("Signatur & Zeitstempel", systemImage: "checkmark.seal") }
+            UpdateSettingsView()
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
         }
         .frame(width: 600)
     }
@@ -359,5 +361,33 @@ struct ProofBadges: View {
         case .expired: .orange
         case .bad: .red
         }
+    }
+}
+
+// MARK: - Updates
+
+struct UpdateSettingsView: View {
+    @State private var automatic = AppModel.shared.updater?.updater.automaticallyChecksForUpdates ?? true
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Automatisch nach Updates suchen", isOn: $automatic)
+                    .onChange(of: automatic) { AppModel.shared.updater?.updater.automaticallyChecksForUpdates = automatic }
+                    .disabled(AppModel.shared.updater == nil)
+                HStack {
+                    Text("Installiert: Stet \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Jetzt suchen …") { AppModel.shared.updater?.checkForUpdates(nil) }
+                        .disabled(AppModel.shared.updater == nil)
+                }
+            } footer: {
+                Text("Stet fragt einmal am Tag bei GitHub nach, ob es eine neue Version gibt, und zeigt sie an. Installiert wird nur, wenn du zustimmst. Jedes Update ist signiert; ein verändertes würde Stet ablehnen. Deine Bücher bleiben bei einem Update unberührt.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(minHeight: 220)
     }
 }

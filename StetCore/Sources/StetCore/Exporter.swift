@@ -30,7 +30,9 @@ public struct ExportResult: Equatable {
 public enum Exporter {
     public static var searchPaths = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
 
+    /// Stet's own copy first (see ExportTools), then Homebrew and the PATH.
     public static func tool(_ name: String) -> URL? {
+        if let own = ExportTools.installed(name) { return own }
         let path = ProcessInfo.processInfo.environment["PATH"]?.split(separator: ":").map(String.init) ?? []
         for folder in searchPaths + path {
             let url = URL(fileURLWithPath: folder).appendingPathComponent(name)
@@ -139,7 +141,8 @@ public enum Exporter {
                 process.arguments = arguments
                 process.currentDirectoryURL = folder
                 var env = ProcessInfo.processInfo.environment
-                env["PATH"] = (searchPaths + [env["PATH"] ?? ""]).joined(separator: ":")
+                let own = ["pandoc", "typst"].compactMap { ExportTools.installed($0)?.deletingLastPathComponent().path }
+                env["PATH"] = (own + searchPaths + [env["PATH"] ?? ""]).joined(separator: ":")
                 process.environment = env
                 let errors = Pipe()
                 process.standardError = errors
