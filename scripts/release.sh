@@ -33,26 +33,37 @@ echo "▸ Stet $VERSION (build $BUILD), signed with: $([[ "$IDENTITY" == "-" ]] 
 echo "▸ Generating Xcode project"
 xcodegen generate --quiet
 
-TEAM=""
-if [[ "$IDENTITY" != "-" ]]; then
-  TEAM="$(echo "$IDENTITY" | sed -n 's/.*(\([A-Z0-9]*\))$/\1/p')"
-fi
-
 echo "▸ Building (Release, arm64 + x86_64)"
 rm -rf "$OUT" build/ReleaseData
+# Built with the project's own ad hoc signature and signed for real below. (An identity given
+# to xcodebuild clashes with the Swift packages' automatically signed resource bundles, and it
+# wouldn't reach Sparkle's helper programs, which notarization checks too.) No debugger
+# entitlement (get-task-allow) either: notarization refuses it.
 xcodebuild -project Stet.xcodeproj -scheme Stet -configuration Release \
   -derivedDataPath build/ReleaseData -quiet build \
   ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
-  ENABLE_HARDENED_RUNTIME=YES \
-  CODE_SIGN_IDENTITY="$IDENTITY" DEVELOPMENT_TEAM="$TEAM" \
-  OTHER_CODE_SIGN_FLAGS="$([[ "$IDENTITY" == "-" ]] && echo "" || echo "--timestamp")"
+  ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
 mkdir -p "$OUT"
 ditto build/ReleaseData/Build/Products/Release/Stet.app "$APP"
 
+echo "▸ Signing"
+# Inside out: Sparkle's helper programs, the frameworks, the Quick Look extensions (each keeps
+# its own entitlements), then the app. Developer ID signatures get Apple's secure timestamp.
+TIMESTAMP="--timestamp=none"
+[[ "$IDENTITY" != "-" ]] && TIMESTAMP="--timestamp"
+sign() { codesign --force --sign "$IDENTITY" --options runtime "$TIMESTAMP" "$@"; }
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/Current"
+for code in "$SPARKLE"/XPCServices/*.xpc "$SPARKLE/Autoupdate" "$SPARKLE/Updater.app" \
+            "$APP"/Contents/Frameworks/*.framework "$APP"/Contents/Frameworks/*.dylib \
+            "$APP"/Contents/PlugIns/*.appex; do
+  if [[ -e "$code" ]]; then sign --preserve-metadata=entitlements "$code"; fi
+done
 if [[ "$IDENTITY" == "-" ]]; then
   # Ad hoc there's no team ID, so the hardened runtime would refuse Sparkle.framework.
-  codesign --force --sign - --options runtime --entitlements Stet/AdHocRelease.entitlements "$APP"
+  sign --entitlements Stet/AdHocRelease.entitlements "$APP"
+else
+  sign "$APP"
 fi
 
 echo "▸ Checking the signature"
@@ -90,40 +101,9 @@ if [[ -n "$PROFILE" ]]; then
   spctl --assess --type open --context context:primary-signature --verbose "$OUT/$NAME.dmg"
 fi
 
-# The update feed for Sparkle: the ZIP, signed with the EdDSA key (in the keychain, or a file
-# for tests via STET_SPARKLE_KEY_FILE). Upload appcast.xml with the release (docs/RELEASING.md).
-SIGN_UPDATE="build/ReleaseData/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update"
-if [[ -x "$SIGN_UPDATE" ]]; then
-  echo "▸ Update feed (appcast.xml)"
-  KEY_ARGS=()
-  [[ -n "${STET_SPARKLE_KEY_FILE:-}" ]] && KEY_ARGS=(--ed-key-file "$STET_SPARKLE_KEY_FILE")
-  # With the key in the keychain, macOS asks once whether sign_update may use it: "Always Allow".
-  if ! SIGNATURE="$("$SIGN_UPDATE" "${KEY_ARGS[@]}" "$OUT/$NAME.zip")"; then
-    echo "⚠︎ No appcast.xml: the update key wasn't available (keychain access refused?)." >&2
-    SIGNATURE=""
-  fi
-fi
-if [[ -n "${SIGNATURE:-}" ]]; then
-  REPO="https://github.com/BooneyNoobington/stet"
-  cat > "$OUT/appcast.xml" <<XML
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Stet</title>
-    <link>$REPO</link>
-    <item>
-      <title>Stet $VERSION</title>
-      <pubDate>$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
-      <sparkle:version>$BUILD</sparkle:version>
-      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>$REPO/releases/tag/v$VERSION</sparkle:releaseNotesLink>
-      <enclosure url="$REPO/releases/download/v$VERSION/$NAME.zip" $SIGNATURE type="application/octet-stream"/>
-    </item>
-  </channel>
-</rss>
-XML
-  echo "✓ $OUT/appcast.xml"
+# The update feed for Sparkle (upload appcast.xml with the release, docs/RELEASING.md).
+if ! scripts/appcast.sh; then
+  echo "⚠︎ No appcast.xml (update key not available?). Only the feed can be redone: scripts/appcast.sh" >&2
 fi
 
 shasum -a 256 "$OUT/$NAME.dmg" "$OUT/$NAME.zip" | sed "s|$OUT/||" > "$OUT/$NAME.sha256"

@@ -47,10 +47,15 @@ build/release/Stet.app/Contents/MacOS/Stet --selftest
 STET_SIGN_IDENTITY="Developer ID Application: Markus Roth (TEAMID)" STET_NOTARY_PROFILE=stet-notary scripts/release.sh
 ```
 
-The script signs with a secure timestamp, sends the app to Apple's notary service, staples the
-ticket to the app, builds the DMG, signs and notarizes that too, and finally asks Gatekeeper
-(`spctl`) whether both would open without a warning. Notarization usually takes a few
-minutes. A version other than the one in `project.yml`: `scripts/release.sh 0.9.1`.
+The script builds the app, signs every part of it inside out (Sparkle's helper programs, the
+frameworks, the Quick Look extensions, then the app) with a secure timestamp, sends the app to
+Apple's notary service, staples the ticket to the app, builds the DMG, signs and notarizes that
+too, and finally asks Gatekeeper (`spctl`) whether both would open without a warning.
+Notarization usually takes a few minutes. A version other than the one in `project.yml`:
+`scripts/release.sh 0.9.1`.
+
+The first time, macOS asks whether `codesign` may use the Developer ID key: enter the login
+password and choose "Always Allow" (otherwise it asks again for each part it signs).
 
 ## Updates (Sparkle)
 
@@ -62,9 +67,10 @@ Sparkle's `generate_keys`, item "Private key for signing Sparkle updates"). Keep
 somewhere safe (`generate_keys -x <file>` exports it): without it there can be no further updates
 for installed copies.
 
-`scripts/release.sh` writes `build/release/appcast.xml` for the ZIP. The first time, macOS asks
-whether `sign_update` may use the key: choose "Always Allow". Upload `appcast.xml` together
-with the DMG and the ZIP.
+`scripts/release.sh` writes `build/release/appcast.xml` for the ZIP (with `scripts/appcast.sh`,
+which also redoes just the feed if that step failed, without building and notarizing again).
+The first time, macOS asks whether `sign_update` may use the key: choose "Always Allow".
+Upload `appcast.xml` together with the DMG and the ZIP.
 
 ## Publishing on GitHub
 

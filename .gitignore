@@ -5,6 +5,8 @@ app/.build/
 app/.swiftpm/
 build/
 StetCore/.build/
+StetCore/.swiftpm/
+xcuserdata/
 Stet.xcodeproj/
 Stet/Info.plist
 Stet/QuickLook*/Info.plist
