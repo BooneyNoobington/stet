@@ -119,6 +119,10 @@ enum HelpContent {
 
         **Schreiben:** Stet schreibt Markdown, zeigt aber die Zeichen nur, wenn der Cursor sie berührt. **Fett** mit ⌘B, *kursiv* mit ⌘I. Anführungszeichen, Gedankenstriche und Auslassungspunkte setzt Stet passend zur Sprache des Buchs.
 
+        **Suchen:** ⌘F sucht im ganzen Buch, Groß- und Kleinschreibung egal. Zeilenschalter oder ⌘G springt zum nächsten Treffer, auch in die nächste Szene; Esc schließt die Suche. Mit dem Häkchen **Ersetzen** zählt Groß- und Kleinschreibung: „Ersetzen“ nimmt sich den markierten Treffer vor (⌘Z macht es rückgängig), „Alle ersetzen“ das ganze Buch – vorher sichert Stet einen Schnappschuss.
+
+        **Titelbild:** Rechts unter Details ▸ Buch ▸ Titelbild ein Bild wählen oder darauf ziehen, am besten im Hochformat. Es wird die erste Seite des PDF-Buchs, das Cover des E-Books und das Symbol des Buchs im Finder.
+
         **Zum Ausprobieren:** Hilfe ▸ Beispielbuch öffnen.
         """),
         HelpTopic(id: "versions", title: "Versionen und Verlauf", symbol: "clock.arrow.circlepath", text: """
@@ -199,6 +203,7 @@ enum HelpContent {
         """),
         HelpTopic(id: "keys", title: "Tastenkürzel", symbol: "keyboard", text: """
         ⌘S  Version sichern
+        ⌘F  Suchen · ⇧⌘F  Suchen und ersetzen · ⌘G / ⇧⌘G  Nächster / vorheriger Treffer
         ⌘N  Neue Szene · ⌥⌘N  Neues Kapitel · ⇧⌘N  Neues Buch
         ⌘O  Buch öffnen · ⌘E  Exportieren · ⌥⌘B  Backup sichern
         ⌘B  fett · ⌘I  kursiv

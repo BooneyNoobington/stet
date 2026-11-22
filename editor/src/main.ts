@@ -15,6 +15,7 @@ import { proseHighlight, stetTheme } from "./theme";
 import { typography } from "./typography";
 import { setWikiTerms, type WikiTerm, wikiExtensions, wikiField, wikiState } from "./wiki";
 import { misspellingField, setMisspellings } from "./spelling";
+import { searchField, setSearchMatches } from "./search";
 
 // ---------------------------------------------------------------------------
 // Host bridge
@@ -114,13 +115,20 @@ function extensions(): Extension[] {
       },
     }),
     history(),
-    keymap.of([...stetKeymap, ...defaultKeymap, ...historyKeymap]),
+    keymap.of([
+      // Not handled here: the app still gets Esc (e.g. to close a comparison).
+      { key: "Escape", run: () => (post({ type: "escape" }), false) },
+      ...stetKeymap,
+      ...defaultKeymap,
+      ...historyKeymap,
+    ]),
     markdown(),
     syntaxHighlighting(proseHighlight),
     stetTheme,
     EditorView.lineWrapping,
     highlightActiveLine(),
     misspellingField,
+    searchField,
     // Spelling is checked by the host (whole scene, the book's words, the wiki's names), not by
     // WebKit, which only looks at the paragraph being typed in. No automatic correction: it
     // would silently "fix" names, dialect and invented words.
@@ -193,6 +201,33 @@ const api: StetEditorAPI = {
   },
   replaceRange(from, to, text) {
     view.dispatch({ changes: { from, to, insert: text }, userEvent: "input.replace" });
+  },
+  replaceRanges(ranges, text) {
+    const length = view.state.doc.length;
+    const changes = ranges
+      .filter((r) => r.from >= 0 && r.to <= length && r.from <= r.to)
+      .sort((a, b) => a.from - b.from)
+      .filter((r, i, all) => i === 0 || r.from >= all[i - 1].to)
+      .map((r) => ({ from: r.from, to: r.to, insert: text }));
+    if (changes.length) view.dispatch({ changes, userEvent: "input.replace.all" });
+  },
+  setSearchMatches(matches, current) {
+    view.dispatch({ effects: setSearchMatches.of({ matches, current }) });
+    return view.state.field(searchField).size;
+  },
+  reveal(from, to) {
+    const length = view.state.doc.length;
+    const anchor = Math.max(0, Math.min(from, length));
+    const head = Math.max(0, Math.min(to, length));
+    view.dispatch({
+      selection: { anchor, head },
+      effects: EditorView.scrollIntoView(anchor, { y: "center" }),
+      userEvent: "select.search",
+    });
+  },
+  selection() {
+    const range = view.state.selection.main;
+    return { from: range.from, to: range.to };
   },
   insertComment(comment) {
     const range = view.state.selection.main;

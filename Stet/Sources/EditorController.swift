@@ -111,6 +111,7 @@ final class EditorController: NSObject, ObservableObject {
     var onChange: (() -> Void)?
     var onActivity: (() -> Void)?
     var onOpenWiki: ((String) -> Void)?
+    var onEscape: (() -> Void)?
     /// Builds extra items for the right-click menu from what was clicked: the text (selection or
     /// word under the mouse), its range, and the wiki entry if it's an underlined name.
     var contextMenuProvider: ((String, NSRange, String?) -> [NSMenuItem])?
@@ -194,6 +195,32 @@ final class EditorController: NSObject, ObservableObject {
         try await call("window.stet.replaceRange(a, b, t); return true", ["a": from, "b": to, "t": text])
     }
 
+    /// Replaces several ranges with the same text, as one undoable edit.
+    func replaceRanges(_ ranges: [NSRange], with text: String) async throws {
+        let list = ranges.map { ["from": $0.location, "to": $0.location + $0.length] }
+        try await call("window.stet.replaceRanges(l, t); return true", ["l": list, "t": text])
+    }
+
+    /// Highlights find matches in the scene; returns how many the editor shows.
+    @discardableResult
+    func setSearchMatches(_ ranges: [NSRange], current: Int?) async -> Int {
+        let list = ranges.map { ["from": $0.location, "to": $0.location + $0.length] }
+        return ((try? await call("return window.stet.setSearchMatches(l, c)", ["l": list, "c": current ?? -1])) as? NSNumber)?.intValue ?? 0
+    }
+
+    /// Selects a range and scrolls it into the middle, leaving the keyboard focus where it is.
+    func reveal(_ range: NSRange) async {
+        _ = try? await call("window.stet.reveal(a, b); return true", ["a": range.location, "b": range.location + range.length])
+    }
+
+    /// The editor's selection (or cursor).
+    func selection() async -> NSRange {
+        guard let value = (try? await call("return window.stet.selection()")) as? [String: Any],
+              let from = (value["from"] as? NSNumber)?.intValue, let to = (value["to"] as? NSNumber)?.intValue
+        else { return NSRange(location: 0, length: 0) }
+        return NSRange(location: from, length: max(0, to - from))
+    }
+
     func insertComment(_ comment: String) async throws {
         try await call("window.stet.insertComment(c); return true", ["c": comment])
     }
@@ -259,6 +286,8 @@ extension EditorController: WKScriptMessageHandler {
             onActivity?()
         case "openWiki":
             if let id = body["id"] as? String { onOpenWiki?(id) }
+        case "escape":
+            onEscape?()
         case "contextMenu":
             let from = (body["from"] as? NSNumber)?.intValue ?? 0
             let to = (body["to"] as? NSNumber)?.intValue ?? from

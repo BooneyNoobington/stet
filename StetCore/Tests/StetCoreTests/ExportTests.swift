@@ -183,6 +183,23 @@ final class ExportTests: TempDirTestCase {
         XCTAssertTrue(marks.contains { $0.name == "Export: PDF – Manuskript" })
     }
 
+    func testCoverInPDFBookAndEPUB() async throws {
+        try requireTools()
+        let book = try await makeBook()
+        let out = temp.appendingPathComponent("Ausgabe")
+        let without = try pdfText(try await Exporter.export(book, options: ExportOptions(format: .pdfBook), to: out.appendingPathComponent("ohne.pdf")).file)
+
+        let picture = temp.appendingPathComponent("titel.png")
+        try CoverTests.image(.png, at: picture)
+        try book.setCover(from: picture)
+        let with = try pdfText(try await Exporter.export(book, options: ExportOptions(format: .pdfBook), to: out.appendingPathComponent("mit.pdf")).file)
+        XCTAssertEqual(with.pages, without.pages + 2, "the cover and the blank back of it")
+
+        let epub = try await Exporter.export(book, options: ExportOptions(format: .epub), to: out.appendingPathComponent("E.epub"))
+        let opf = try await zipEntry(epub.file, "EPUB/content.opf")
+        XCTAssertTrue(opf.contains("cover-image"), "the ePUB names its cover")
+    }
+
     func testUnusualMarkupDoesNotBreakThePDF() async throws {
         try requireTools()
         let book = try await Book.create(at: temp.appendingPathComponent("Markup.stet"), title: "Markup", author: "Test")

@@ -15,6 +15,7 @@ struct BookView: View {
         } detail: {
             VStack(spacing: 0) {
                 Banners(session: session)
+                FindBarHost(find: session.find)
                 ZStack {
                     EditorWebView(webView: editor.webView)
                     if let comparison = session.comparison {

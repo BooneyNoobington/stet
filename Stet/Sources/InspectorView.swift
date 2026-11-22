@@ -29,6 +29,10 @@ struct InspectorView: View {
             case .feedback: FeedbackPanel(session: session)
             }
         }
+        // A fixed ideal width: otherwise the column follows its content, which gets wider while
+        // a text field has the focus and narrower again whenever the book's file changes, so
+        // the window shook while typing chapter or book details.
+        .frame(minWidth: 240, idealWidth: 280, maxWidth: .infinity)
     }
 }
 
@@ -136,6 +140,7 @@ private struct DetailsForm: View {
                     get: { session.manifest.language },
                     set: { value in session.updateBook { $0.language = value } }
                 ))
+                LabeledContent("Titelbild") { CoverControl(session: session) }
                 LabeledContent("Wörter", value: session.totalWords.formatted())
                 TextField("Fakten-Felder", text: Binding(
                     get: { session.manifest.sceneFactFields.joined(separator: ", ") },

@@ -1,3 +1,4 @@
+import type { SearchMatch } from "./search";
 import type { Misspelling } from "./spelling";
 import type { EditorSettings } from "./settings";
 import type { TextStats } from "./stats";
@@ -10,6 +11,8 @@ export type HostMessage =
   | { type: "stats"; words: number; characters: number }
   | { type: "activity" }
   | { type: "openWiki"; id: string }
+  /** Esc in the text (the host closes its find bar; the key goes on to the app as well). */
+  | { type: "escape" }
   /** Sent on right-click, before the native menu opens: the selection (or the word under the
    *  mouse) and the wiki entry under the mouse, if any. */
   | { type: "contextMenu"; text: string; wikiId: string | null; from: number; to: number };
@@ -34,6 +37,14 @@ export interface StetEditorAPI {
   select(from: number, to: number): void;
   /** Replaces a range as one undoable edit. */
   replaceRange(from: number, to: number, text: string): void;
+  /** Replaces several ranges with the same text, as one undoable edit. */
+  replaceRanges(ranges: SearchMatch[], text: string): void;
+  /** Highlights the find bar's matches in this scene; `current` is drawn stronger (-1: none). Returns how many show. */
+  setSearchMatches(matches: SearchMatch[], current: number): number;
+  /** Selects a range and scrolls it to the middle, without taking the keyboard focus. */
+  reveal(from: number, to: number): void;
+  /** The main selection. */
+  selection(): SearchMatch;
   /** Wraps the selection as `{==…==}{>>comment<<}`, or inserts `{>>comment<<}` at the cursor. */
   insertComment(comment: string): void;
   /** Wraps a range as `{==…==}{>>comment<<}`. */

@@ -83,6 +83,21 @@ struct StetCommands: Commands {
                 .keyboardShortcut("s")
                 .disabled(model.session == nil)
         }
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("Suchen …") { Task { await model.session?.find.show() } }
+                .keyboardShortcut("f")
+                .disabled(model.session == nil)
+            Button("Suchen und ersetzen …") { Task { await model.session?.find.show(replace: true) } }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(model.session == nil)
+            Button("Weitersuchen") { Task { await model.session?.find.next() } }
+                .keyboardShortcut("g")
+                .disabled(model.session == nil)
+            Button("Rückwärts suchen") { Task { await model.session?.find.previous() } }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(model.session == nil)
+        }
         CommandGroup(replacing: .importExport) {
             Button("Exportieren …") { model.session?.sheet = .export }
                 .keyboardShortcut("e")

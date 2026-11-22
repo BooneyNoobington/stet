@@ -97,6 +97,9 @@ private struct WikiEntryEditor: View {
     @ObservedObject var session: BookSession
     @ObservedObject var model: AppModel
     @State private var draft: WikiEntry
+    /// The facts with identities of their own: a fact's id is its name, so editing the name in a
+    /// list keyed by it would replace the row (and its text field) with every keystroke.
+    @State private var factRows: [EditableFact]
     @State private var aliasText: String
     @State private var notMeantText: String
     @State private var saveTask: Task<Void, Never>?
@@ -106,6 +109,7 @@ private struct WikiEntryEditor: View {
         self.session = session
         self.model = model
         _draft = State(initialValue: entry)
+        _factRows = State(initialValue: entry.facts.map { EditableFact(key: $0.key, value: $0.value) })
         _aliasText = State(initialValue: entry.aliases.joined(separator: ", "))
         _notMeantText = State(initialValue: entry.notMeant.joined(separator: ", "))
     }
@@ -124,19 +128,19 @@ private struct WikiEntryEditor: View {
                     .help("Wörter, die wie dieser Name aussehen, aber jemand anderen meinen – etwa „Andreas“, wenn es neben Andrea auch einen Andreas gibt, der (noch) keinen eigenen Eintrag hat. Durch Kommas getrennt.")
             }
             Section {
-                ForEach($draft.facts) { $fact in
+                ForEach($factRows) { $row in
                     HStack {
-                        TextField("", text: $fact.key, prompt: Text("Feld")).frame(width: 110)
-                        TextField("", text: $fact.value, prompt: Text("Wert"))
-                        Button { draft.facts.removeAll { $0.id == fact.id } } label: { Image(systemName: "minus.circle") }
+                        TextField("", text: $row.key, prompt: Text("Feld")).frame(width: 110)
+                        TextField("", text: $row.value, prompt: Text("Wert"))
+                        Button { factRows.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
                     }
                 }
                 Button("Fakt hinzufügen") {
                     var key = "Neu"
                     var n = 2
-                    while draft.facts.contains(where: { $0.key == key }) { key = "Neu \(n)"; n += 1 }
-                    draft.facts.append(Fact(key, ""))
+                    while factRows.contains(where: { $0.key == key }) { key = "Neu \(n)"; n += 1 }
+                    factRows.append(EditableFact(key: key, value: ""))
                 }
             } header: {
                 Text("Fakten")
@@ -174,6 +178,7 @@ private struct WikiEntryEditor: View {
         }
         .formStyle(.grouped)
         .onChange(of: draft) { scheduleSave() }
+        .onChange(of: factRows) { draft.facts = factRows.map { Fact($0.key, $0.value) } }
         .onChange(of: aliasText) {
             draft.aliases = aliasText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         }
@@ -207,6 +212,13 @@ private struct WikiEntryEditor: View {
         else { return }
         session.saveWiki(draft)
     }
+}
+
+/// A fact being edited: it keeps its identity while its name changes.
+private struct EditableFact: Identifiable, Equatable {
+    let id = UUID()
+    var key: String
+    var value: String
 }
 
 extension WikiKind {

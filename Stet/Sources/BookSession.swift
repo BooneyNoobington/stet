@@ -53,6 +53,8 @@ final class BookSession: ObservableObject {
     @Published var feedback: [FeedbackEntry] = []
     @Published var backupWarning: String?
     @Published var wiki: [WikiEntry] = []
+    /// Changes whenever the cover image does (its file name may stay the same).
+    @Published var coverRevision = 0
     @Published private(set) var sceneFacts: [String: [Fact]] = [:]
     // Signatures and timestamps
     @Published var stamps: [String: [StampRecord]] = [:]
@@ -95,6 +97,9 @@ final class BookSession: ObservableObject {
         let summary: WordDiff.Summary
     }
 
+    /// Find and replace in the whole book (⌘F).
+    private(set) lazy var find = FindController(session: self)
+
     private var autosaveTask: Task<Void, Never>?
     private var persistChain: Task<Void, Never>?
     private var snapshotTimer: Timer?
@@ -117,6 +122,10 @@ final class BookSession: ObservableObject {
         editor.onChange = { [weak self] in self?.editorChanged() }
         editor.onActivity = { [weak self] in self?.activeMinutes.insert(Int(Date().timeIntervalSince1970 / 60)) }
         editor.onOpenWiki = { id in AppModel.shared.openWiki(id) }
+        editor.onEscape = { [weak self] in
+            guard let find = self?.find, find.isVisible else { return }
+            Task { await find.hide() }
+        }
         editor.contextMenuProvider = { [weak self] text, range, wikiID in self?.menuItems(text: text, range: range, wikiID: wikiID) ?? [] }
         spelling = SpellingChecker(language: manifest.language)
         loadWiki()
@@ -163,6 +172,7 @@ final class BookSession: ObservableObject {
         editor.onChange = nil
         editor.onActivity = nil
         editor.onOpenWiki = nil
+        editor.onEscape = nil
         editor.contextMenuProvider = nil
         spellCheckTask?.cancel()
         spelling?.close()
@@ -181,6 +191,12 @@ final class BookSession: ObservableObject {
             }
             cache(scene)
         }
+    }
+
+    /// Scene files were changed directly (not through the editor), e.g. by "Alle ersetzen".
+    func sceneFilesChanged() {
+        reloadSceneInfo()
+        hasChangesSinceVersion = true
     }
 
     private func cache(_ scene: SceneFile) {
@@ -213,6 +229,7 @@ final class BookSession: ObservableObject {
             try await editor.load(scene.body)
             editor.focus()
             scheduleSpellCheck(after: .zero)
+            await find.sceneChanged()
             var state = LocalState.load(for: book)
             state.lastSceneID = id
             state.save(for: book)
@@ -226,6 +243,7 @@ final class BookSession: ObservableObject {
         isWritingPending = true
         hasChangesSinceVersion = true
         scheduleSpellCheck()
+        find.textChanged()
         autosaveTask?.cancel()
         autosaveTask = Task { [weak self] in
             try? await Task.sleep(for: Self.autosaveDelay)

@@ -20,6 +20,8 @@
   --stet-todo: #b6492f;
   --stet-misspelled: rgba(214, 48, 39, 0.75);
   --stet-hint: rgba(40, 110, 200, 0.7);
+  --stet-find: rgba(255, 210, 0, 0.3);
+  --stet-find-current: rgba(255, 198, 0, 0.95);
 
   color-scheme: light dark;
 }
@@ -39,6 +41,8 @@
     --stet-todo: #f08a6c;
     --stet-misspelled: rgba(255, 105, 97, 0.8);
     --stet-hint: rgba(110, 170, 255, 0.75);
+    --stet-find: rgba(255, 214, 10, 0.24);
+    --stet-find-current: rgba(255, 204, 0, 0.9);
   }
 }
 
@@ -265,4 +269,17 @@ body {
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
   text-decoration-skip-ink: none;
+}
+
+/* Matches of the find bar (⌘F); the current one stands out, in dark mode with dark text. */
+.stet-search-match {
+  background: var(--stet-find);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--stet-find);
+}
+
+.stet-search-current {
+  background: var(--stet-find-current);
+  box-shadow: 0 0 0 1px var(--stet-find-current);
+  color: #1d1a16;
 }

@@ -74,12 +74,52 @@ Upload `appcast.xml` together with the DMG and the ZIP.
 
 ## Publishing on GitHub
 
-1. Tag the commit the release was built from: `git tag v0.9.0 && git push origin v0.9.0`.
-2. GitHub ▸ Releases ▸ "Draft a new release", choose the tag, attach
+0. Before building: set the new `MARKETING_VERSION` in `project.yml` and commit everything.
+   The build number is the number of commits, so a release built from a clean, committed
+   tree belongs to exactly one commit (`release.sh` warns otherwise).
+1. Push it and tag the commit the release was built from:
+
+   ```bash
+   git push origin main
+   git tag -a v0.9.0 -m "Stet 0.9.0"
+   git push origin v0.9.0
+   ```
+
+2. GitHub ▸ Releases ▸ "Draft a new release", choose the tag, title "Stet 0.9.0", attach
    `Stet-0.9.0.dmg`, `Stet-0.9.0.zip` and `appcast.xml`, and paste the checksums from
    `Stet-0.9.0.sha256`. (The ZIP is what Sparkle downloads; the DMG is for new users.)
+   Leave "Set as the latest release" on and "Set as a pre-release" off, then publish.
 3. Test it the way a club member will: download the DMG on another Mac (or another user
    account), open it, drag Stet to Programme, start it. There must be no warning.
+4. Check that the feed is reachable (it should end in `200`):
+
+   ```bash
+   curl -sIL https://github.com/BooneyNoobington/stet/releases/latest/download/appcast.xml | grep HTTP
+   ```
+
+The release notes are what writers read: Sparkle shows the release's GitHub page in its update
+window. Write them in German and without technical terms (what's new, what got fixed), plus one
+line on installing ("DMG öffnen, Stet in den Ordner Programme ziehen"). The link to hand out is
+`https://github.com/BooneyNoobington/stet/releases/latest`; it always shows the newest version.
+
+### How an update finds its way, and what breaks it
+
+Installed copies ask `…/releases/latest/download/appcast.xml` once a day; GitHub redirects that
+to the newest published release. The feed names the ZIP as
+`…/releases/download/v<version>/Stet-<version>.zip`; Sparkle downloads it and installs it only if
+its EdDSA signature and length match the feed and the new app is signed by the same Developer ID.
+So:
+
+- **The tag must be exactly `v<version>`, and the files keep their names.** Otherwise the feed
+  points nowhere.
+- **No drafts, no pre-releases.** "Latest" only counts published, final releases; with a
+  pre-release on top, installed copies don't find the new feed and quietly get no update.
+- **Every release needs its own `appcast.xml`.** "Latest" moves to each new release; one
+  without a feed leaves every installed copy without updates.
+- **Never replace the ZIP alone.** A new ZIP needs a new feed: run `scripts/appcast.sh` and
+  replace `appcast.xml` too, or Sparkle rejects the download.
+- **Never lose the update key or change `SUPublicEDKey`.** Installed copies only accept updates
+  signed with the key they know.
 
 ## Later: Homebrew
 

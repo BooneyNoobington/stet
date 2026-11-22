@@ -11,6 +11,8 @@ import WebKit
 ///   Stet --selftest                     editor bridge: byte-exact round trips, settings, large texts
 ///   Stet --selftest-window [<folder>]   full-screen capability, navigator rows after zooming and in
 ///                                       full screen; optional snapshots of Stet's own windows
+///   Stet --selftest-typing [<folder>]   types into the inspector's and the wiki's fields like a
+///                                       person and checks that nothing moves and focus stays
 ///   Stet --selftest-book <folder>       imports <folder> into a temporary book and drives the whole
 ///                                       flow: scenes, edit, version, note, snapshot, history, restore,
 ///                                       structure, health. The temporary book is deleted afterwards;
@@ -22,6 +24,7 @@ enum SelfTest {
     static func startIfRequested() {
         let args = CommandLine.arguments
         isRunning = args.contains("--selftest") || args.contains("--selftest-book") || args.contains("--selftest-window")
+            || args.contains("--selftest-typing")
         if isRunning {
             // Never the user's keychain for server passwords in a self-test.
             ServerLogins.store = MemoryLoginStore()
@@ -56,6 +59,9 @@ enum SelfTest {
             let output = next.flatMap { $0.hasPrefix("--") ? nil : URL(fileURLWithPath: $0) }
             let experiment = args.contains("--experiment")
             Task { @MainActor in await runWindow(snapshots: output, inExperiment: experiment) }
+        } else if args.contains("--selftest-typing") {
+            armWatchdog(seconds: 120)
+            Task { @MainActor in await runTyping() }
         } else if let flag = args.firstIndex(of: "--selftest-book"), args.indices.contains(flag + 1) {
             armWatchdog(seconds: 120)
             let source = URL(fileURLWithPath: args[flag + 1])
@@ -63,7 +69,7 @@ enum SelfTest {
         }
     }
 
-    private static func armWatchdog(seconds: Double = 30) {
+    static func armWatchdog(seconds: Double = 30) {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
             print(#"{"ok": false, "failures": ["timeout"]}"#)
             removeTemporaryFolders()
@@ -75,7 +81,7 @@ enum SelfTest {
     /// `exit()` skips `defer`, so every way out removes them explicitly.
     private static var temporaryFolders: [URL] = []
 
-    private static func temporaryFolder(_ prefix: String) -> URL {
+    static func temporaryFolder(_ prefix: String) -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(prefix)-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         temporaryFolders.append(url)
@@ -135,7 +141,7 @@ enum SelfTest {
         try? png.write(to: url)
     }
 
-    private static func finish(_ report: [String: Any], failures: [String]) -> Never {
+    static func finish(_ report: [String: Any], failures: [String]) -> Never {
         removeTemporaryFolders()
         var report = report
         report["failures"] = failures
@@ -532,6 +538,17 @@ enum SelfTest {
             "moved": imported.moved.count, "removed": imported.removed.count, "warnings": imported.warnings.count,
         ]
         report["sourceSyncService"] = SyncLocation.detect(source)?.service ?? "none"
+
+        // Find in the whole book: how long one search takes (numbers only, no text).
+        session.find.isVisible = true
+        session.find.query = "und"
+        let searchStart = Date()
+        await session.find.searchNow()
+        report["findMatchesForUnd"] = session.find.matches.count
+        report["findScenesWithMatches"] = session.find.sceneCount
+        report["findMs"] = Int(Date().timeIntervalSince(searchStart) * 1000)
+        check(!session.find.matches.isEmpty, "findInRealBook")
+        await session.find.hide()
 
         // Every scene loads into the editor byte for byte, and browsing changes nothing.
         let ids = session.manifest.sceneIDs
