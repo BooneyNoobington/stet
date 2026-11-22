@@ -26,9 +26,10 @@ struct BookView: View {
                 StatusBar(session: session, editor: editor)
             }
         }
+        .limitedWritingTools()
         .inspector(isPresented: $showInspector) {
             InspectorView(session: session, tab: $inspectorTab)
-                .inspectorColumnWidth(min: 240, ideal: 280, max: 400)
+                .inspectorColumnWidth(min: InspectorView.minWidth, ideal: InspectorView.idealWidth, max: 520)
         }
         .navigationTitle(session.manifest.title)
         .navigationSubtitle(session.currentScene?.displayTitle ?? "")
@@ -53,18 +54,6 @@ struct BookView: View {
                     Label("Fokus", systemImage: "scope")
                 }
                 .help("Fokusmodus (⌥⌘F)")
-
-                Button {
-                    if showInspector && inspectorTab == .history {
-                        showInspector = false
-                    } else {
-                        inspectorTab = .history
-                        showInspector = true
-                    }
-                } label: {
-                    Label("Verlauf", systemImage: "clock.arrow.circlepath")
-                }
-                .help("Verlauf dieser Szene")
 
                 Button { AppModel.shared.openWiki() } label: {
                     Label("Wiki", systemImage: "text.book.closed")
@@ -114,6 +103,14 @@ struct BookView: View {
         } message: {
             Text(session.errorMessage ?? "")
         }
+    }
+}
+
+extension View {
+    /// Apple's writing tools (Korrekturlesen, Umschreiben …) show their results in a panel of
+    /// their own instead of changing the text in place (the editor does the same).
+    @ViewBuilder func limitedWritingTools() -> some View {
+        if #available(macOS 15.0, *) { writingToolsBehavior(.limited) } else { self }
     }
 }
 

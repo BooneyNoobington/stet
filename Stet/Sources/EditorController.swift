@@ -141,6 +141,9 @@ final class EditorController: NSObject, ObservableObject {
     override init() {
         Self.registerTextCheckingDefaults()
         let configuration = WKWebViewConfiguration()
+        // Apple's writing tools (Korrekturlesen, Umschreiben …) show their results in a panel of
+        // their own: rewriting in place could drop text the editor hides (markup, comments).
+        if #available(macOS 15.0, *) { configuration.writingToolsBehavior = .limited }
         let contentController = WKUserContentController()
         configuration.userContentController = contentController
         webView = StetWebView(frame: .zero, configuration: configuration)

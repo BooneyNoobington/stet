@@ -76,6 +76,7 @@ private struct WikiBrowser: View {
             }
         }
         .navigationTitle("Wiki – \(session.manifest.title)")
+        .limitedWritingTools()
         .alert("Wiki", isPresented: Binding(get: { session.wikiNotice != nil }, set: { if !$0 { session.wikiNotice = nil } })) {
             Button("OK") { session.wikiNotice = nil }
         } message: {

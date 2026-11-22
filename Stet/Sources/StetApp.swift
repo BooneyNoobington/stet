@@ -15,7 +15,7 @@ struct StetApp: App {
         Window("Stet", id: "main") {
             RootView(model: model, editor: model.editor)
         }
-        .defaultSize(width: 1180, height: 800)
+        .defaultSize(width: 1280, height: 820)
         .commands { StetCommands(model: model, editor: model.editor) }
 
         Window("Wiki", id: "wiki") {

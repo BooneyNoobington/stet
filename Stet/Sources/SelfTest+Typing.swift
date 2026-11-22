@@ -75,6 +75,20 @@ extension SelfTest {
         }
         if let bookTitle = fields.first(where: { $0.stringValue == "Tipptest" }) { targets.append(("bookTitle", bookTitle)) }
         report["detailTargets"] = targets.map(\.0)
+
+        // The inspector is wide enough for its German tab names; the toolbar has no second
+        // way into the history; Apple's writing tools only work in their own panel.
+        if let tabs = allViews(in: window).compactMap({ $0 as? NSSegmentedControl }).first(where: { frameInWindow($0).minX >= editorRight - 1 }) {
+            report["inspectorTabs"] = (0..<tabs.segmentCount).compactMap { tabs.label(forSegment: $0) }
+            report["tabsWidth"] = "\(Int(tabs.frame.width)) of \(Int(tabs.intrinsicContentSize.width)) needed"
+            check(tabs.frame.width >= tabs.intrinsicContentSize.width - 1, "inspectorTabsFit")
+        }
+        let toolbar = window.toolbar?.items.map { $0.label.isEmpty ? $0.paletteLabel : $0.label } ?? []
+        report["toolbar"] = toolbar
+        check(!toolbar.contains("Verlauf"), "historyOnlyInInspector")
+        if #available(macOS 15.0, *) {
+            check(model.editor.webView.configuration.writingToolsBehavior == .limited, "writingToolsInOwnPanel")
+        }
         check(targets.count >= 6, "foundDetailFields")
 
         var movement: [String: Any] = [:]
@@ -88,7 +102,7 @@ extension SelfTest {
 
         // The inspector stays resizable by hand, and keeps the width it was given.
         if let split = allViews(in: window).compactMap({ $0 as? NSSplitView })
-            .first(where: { $0.arrangedSubviews.count >= 2 && abs(($0.arrangedSubviews.last?.frame.width ?? 0) - 280) < 80 }),
+            .first(where: { $0.arrangedSubviews.count >= 2 && abs(($0.arrangedSubviews.last?.frame.width ?? 0) - InspectorView.idealWidth) < 80 }),
            let inspector = split.arrangedSubviews.last, let chapter = targets.first(where: { $0.0 == "chapterTitle" })?.1
         {
             let wider = inspector.frame.width + 60
@@ -335,7 +349,9 @@ extension SelfTest {
                     shapes["field[\(field.placeholderString ?? "")]-\(id)"] = frameInWindow(field)
                 case let web as NSView where String(describing: type(of: web)).contains("WebView"):
                     shapes["webView-\(id)"] = frameInWindow(web)
-                case let bar as NSView where ["Titlebar", "Toolbar"].contains(where: String(describing: type(of: bar)).contains):
+                // The window title grows with the book title being typed: that's meant to move.
+                case let bar as NSView where ["Titlebar", "Toolbar"].contains(where: String(describing: type(of: bar)).contains)
+                    && !String(describing: type(of: bar)).contains("TitleField"):
                     shapes["\(type(of: bar))-\(id)"] = frameInWindow(bar)
                 default:
                     break

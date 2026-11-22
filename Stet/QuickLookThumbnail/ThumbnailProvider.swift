@@ -15,11 +15,13 @@ final class ThumbnailProvider: QLThumbnailProvider {
                let cover = Self.loadImage(coverURL, maxPixels: max(request.maximumSize.width, request.maximumSize.height) * request.scale)
             {
                 let size = Self.fit(CGSize(width: cover.width, height: cover.height), into: request.maximumSize)
-                handler(QLThumbnailReply(contextSize: size) { context -> Bool in
-                    context.interpolationQuality = .high
-                    context.draw(cover, in: CGRect(origin: .zero, size: size))
+                // Drawn in points into the current (scaled) context, like the title page: the
+                // plain CGContext variant counts in pixels, so on Retina screens the cover
+                // filled only a quarter of the icon.
+                handler(QLThumbnailReply(contextSize: size, currentContextDrawing: { () -> Bool in
+                    Self.draw(cover, in: CGRect(origin: .zero, size: size))
                     return true
-                }, nil)
+                }), nil)
             } else {
                 let size = Self.fit(CGSize(width: Self.pageAspect, height: 1), into: request.maximumSize)
                 handler(QLThumbnailReply(contextSize: size, currentContextDrawing: { () -> Bool in
@@ -41,6 +43,12 @@ final class ThumbnailProvider: QLThumbnailProvider {
             kCGImageSourceThumbnailMaxPixelSize: max(64, maxPixels),
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// Draws the picture into the current graphics context, the right way up in either orientation.
+    static func draw(_ image: CGImage, in rect: CGRect) {
+        NSImage(cgImage: image, size: rect.size).draw(in: rect, from: .zero, operation: .copy, fraction: 1,
+                                                      respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high.rawValue])
     }
 
     static func fit(_ size: CGSize, into bounds: CGSize) -> CGSize {

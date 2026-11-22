@@ -13,6 +13,10 @@ struct InspectorView: View {
     @ObservedObject var session: BookSession
     @Binding var tab: Tab
 
+    /// Wide enough for the German tab names and the details' labels.
+    static let minWidth: CGFloat = 356
+    static let idealWidth: CGFloat = 370
+
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $tab) {
@@ -32,7 +36,7 @@ struct InspectorView: View {
         // A fixed ideal width: otherwise the column follows its content, which gets wider while
         // a text field has the focus and narrower again whenever the book's file changes, so
         // the window shook while typing chapter or book details.
-        .frame(minWidth: 240, idealWidth: 280, maxWidth: .infinity)
+        .frame(minWidth: Self.minWidth, idealWidth: Self.idealWidth, maxWidth: .infinity)
     }
 }
 
