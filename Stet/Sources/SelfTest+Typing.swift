@@ -155,7 +155,208 @@ extension SelfTest {
         let quoted = await quoteChecks(session: session, window: window)
         report.merge(quoted.report) { _, new in new }
         failures += quoted.failures
+        let formatted = await formatChecks(session: session, window: window)
+        report.merge(formatted.report) { _, new in new }
+        failures += formatted.failures
         finish(report, failures: failures)
+    }
+
+    // MARK: Formatting
+
+    /// The format buttons in the toolbar (lit in italic text and a quote, and working), the
+    /// Format menu with its shortcuts (each once in the menu bar), ⌘I as a key, a shortcut in
+    /// another field leaving the text alone, and the right-click menu's format items.
+    @MainActor
+    private static func formatChecks(session: BookSession, window: NSWindow) async -> (report: [String: Any], failures: [String]) {
+        var report: [String: Any] = [:]
+        var failures: [String] = []
+        func check(_ ok: Bool, _ name: String) {
+            report[name] = ok
+            if !ok { failures.append(name) }
+        }
+        for other in NSApp.windows where other !== window && other.isVisible { other.close() }
+        window.makeKeyAndOrderFront(nil)
+        await session.select(session.manifest.sceneIDs[0])
+        try? await Task.sleep(for: .milliseconds(300))
+        let editor = AppModel.shared.editor
+        let demo = "Der Regen hatte am Morgen aufgehört. Auf dem Tisch lag ein Zettel:\n\n> Bin beim Boot. *Vergiss den Schlüssel nicht.*\n\nMara steckte ihn ein."
+        try? await editor.replaceText(demo)
+        func text() async -> String { (try? await editor.text()) ?? "" }
+        func select(_ part: String, length: Int? = nil) async {
+            let range = (await text() as NSString).range(of: part)
+            await editor.select(from: range.location, to: range.location + (length ?? range.length))
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+
+        // The toolbar's group: Kursiv, Fett, Zitat, Kommentar (SwiftUI buttons in a toolbar item group).
+        func click(_ view: NSView) async {
+            let frame = frameInWindow(view)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: frame.midX, y: frame.midY), modifierFlags: [],
+                                                  timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                  context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        /// How each button looks: its average colour, as numbers to compare.
+        func looks(_ views: [NSView]) -> [[Double]] {
+            views.map { view in
+                guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return [] }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                var sum = [0.0, 0.0, 0.0]
+                var count = 0.0
+                for x in stride(from: 0, to: rep.pixelsWide, by: 2) {
+                    for y in stride(from: 0, to: rep.pixelsHigh, by: 2) {
+                        guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                        sum[0] += c.redComponent; sum[1] += c.greenComponent; sum[2] += c.blueComponent
+                        count += 1
+                    }
+                }
+                return sum.map { count > 0 ? ($0 / count * 1000).rounded() / 1000 : 0 }
+            }
+        }
+        func difference(_ a: [Double], _ b: [Double]) -> Double {
+            guard a.count == 3, b.count == 3 else { return 0 }
+            return zip(a, b).map { abs($0 - $1) }.reduce(0, +)
+        }
+        let groups = allViews(in: window).filter { String(describing: type(of: $0)) == "NSToolbarItemGroupView" && !$0.isHiddenOrHasHiddenAncestor }
+        let buttons = groups.first.map { group in
+            allViews(in: window).filter { String(describing: type(of: $0)) == "NSToolbarItemGroupLayoutWrapper" && $0.isDescendant(of: group) }
+                .sorted { frameInWindow($0).minX < frameInWindow($1).minX }
+        } ?? []
+        let labels = window.toolbar?.items.compactMap { $0 as? NSToolbarItemGroup }.first { $0.subitems.count == 4 }?.subitems.map(\.label) ?? []
+        report["formatButtons"] = ["groups": groups.count, "buttons": buttons.count, "labels": labels]
+        check(groups.count == 1 && buttons.count == 4, "formatButtonsInToolbar")
+        if buttons.count == 4 {
+            await select("Regen", length: 0)
+            let plain = looks(buttons)
+            await select("Vergiss", length: 0)
+            let italicQuote = looks(buttons)
+            let changed = zip(plain, italicQuote).map { (difference($0, $1) * 1000).rounded() / 1000 }
+            report["buttonsLit"] = ["state": ["italic": editor.formatState.italic, "bold": editor.formatState.bold, "quote": editor.formatState.quote],
+                                    "change": changed]
+            check(editor.formatState == FormatState(italic: true, bold: false, quote: true), "formatStateFollowsCursor")
+            check(changed[0] > 0.03 && changed[2] > 0.03 && changed[1] < 0.01 && changed[3] < 0.01, "buttonsShowFormat")
+            if let folder = pictureFolder { await render(window, to: folder.appendingPathComponent("format.png")) }
+            // A click on Fett, with the mouse: on, and off again.
+            await select("Morgen")
+            await click(buttons[1])
+            check(await text().contains("am **Morgen** aufgehört"), "boldButtonWorks")
+            check(editor.formatState.bold, "boldButtonLit")
+            await click(buttons[1])
+            check(await text() == demo, "boldButtonUndoes")
+        }
+
+        // The Format menu: its items, and each shortcut once in the whole menu bar.
+        let format = NSApp.mainMenu?.items.filter { $0.title == "Format" } ?? []
+        report["formatMenu"] = format.first?.submenu?.items.map { $0.isSeparatorItem ? "—" : $0.title } ?? []
+        check(format.count == 1 && (format.first?.submenu?.items.map { $0.isSeparatorItem ? "—" : $0.title } ?? [])
+              == ["Kursiv", "Fett", "Zitat", "—", "Kommentar einfügen", "TODO einfügen"], "formatMenu")
+        var shortcuts: [String: [String]] = [:]
+        func collect(_ menu: NSMenu) {
+            for item in menu.items {
+                if !item.keyEquivalent.isEmpty {
+                    let mods = item.keyEquivalentModifierMask.intersection([.command, .option, .shift, .control])
+                    let key = (mods.contains(.control) ? "⌃" : "") + (mods.contains(.option) ? "⌥" : "") + (mods.contains(.shift) ? "⇧" : "")
+                        + (mods.contains(.command) ? "⌘" : "") + item.keyEquivalent.uppercased()
+                    shortcuts[key, default: []].append(item.title)
+                }
+                if let sub = item.submenu { collect(sub) }
+            }
+        }
+        NSApp.mainMenu.map(collect)
+        report["formatShortcuts"] = ["⌘I": shortcuts["⌘I"] ?? [], "⌘B": shortcuts["⌘B"] ?? [], "⌥⌘M": shortcuts["⌥⌘M"] ?? [], "⌥⌘T": shortcuts["⌥⌘T"] ?? []]
+        check(shortcuts["⌘I"] == ["Kursiv"] && shortcuts["⌘B"] == ["Fett"] && shortcuts["⌥⌘M"] == ["Kommentar einfügen"], "formatShortcutsOnce")
+
+        // ⌘I as a real key through the app: once on, once off.
+        func commandKey(_ character: String, code: UInt16) async {
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: .command, timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil, characters: character,
+                                                charactersIgnoringModifiers: character, isARepeat: false, keyCode: code) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        await select("Tisch")
+        window.makeFirstResponder(editor.webView)
+        await commandKey("i", code: 34)
+        let once = await text()
+        await commandKey("i", code: 34)
+        let twice = await text()
+        report["commandI"] = ["once": once.contains("dem *Tisch* lag"), "twice": twice == demo]
+        check(once.contains("dem *Tisch* lag") && twice == demo, "commandIOnceOnOnceOff")
+
+        // Enter in a quote, with real keys: a new paragraph stays in it, one more Enter leaves it.
+        let quoteEnd = NSMaxRange((await text() as NSString).range(of: "nicht.*"))
+        await editor.select(from: quoteEnd, to: quoteEnd)
+        window.makeFirstResponder(editor.webView)
+        for character in "\r\rNoch etwas.\r\r\rWeiter." {
+            let code: UInt16 = character == "\r" ? 36 : character == " " ? 49 : 0
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                windowNumber: window.windowNumber, context: nil, characters: String(character),
+                                                charactersIgnoringModifiers: String(character), isARepeat: false, keyCode: code) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        try? await Task.sleep(for: .milliseconds(300))
+        let continued = await text()
+        let expected = demo.replacingOccurrences(of: "nicht.*\n\nMara", with: "nicht.*\n>\n> Noch etwas.\n\nWeiter.\n\nMara")
+        report["enterInQuote"] = continued == expected ? true : continued
+        if continued != expected { failures.append("enterInQuote") }
+        try? await editor.replaceText(demo)
+
+        // ⌘B while typing in the inspector: the text stays as it is.
+        if let field = allViews(in: window).compactMap({ $0 as? NSTextField })
+            .first(where: { $0.isEditable && frameInWindow($0).minX >= frameInWindow(editor.webView).maxX - 1 })
+        {
+            window.makeFirstResponder(field)
+            try? await Task.sleep(for: .milliseconds(200))
+            await commandKey("b", code: 11)
+            check(await text() == demo, "shortcutInOtherFieldLeavesText")
+        }
+
+        // The real right-click menu on the first word: Stet's format items, and Fett works.
+        let point = (try? await editor.call("""
+            const r = document.querySelector('.cm-line').getBoundingClientRect(); return [r.left + 6, r.top + r.height / 2]
+            """)) as? [Double]
+        if let point, point.count == 2 {
+            window.makeFirstResponder(editor.webView)
+            let location = editor.webView.convert(NSPoint(x: point[0], y: point[1]), to: nil)
+            for type in [NSEvent.EventType.rightMouseDown, .rightMouseUp] {
+                if let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+            var menu: NSMenu?
+            for _ in 0..<40 where menu == nil {
+                try? await Task.sleep(for: .milliseconds(100))
+                menu = editor.webView.openMenu
+            }
+            let titles = menu?.items.map { $0.isSeparatorItem ? "—" : $0.title } ?? []
+            report["contextMenu"] = titles
+            let bold = menu?.items.first { $0.title == "Fett" }
+            menu?.cancelTracking()
+            try? await Task.sleep(for: .milliseconds(300))
+            check(["Kursiv", "Fett", "Zitat", "Kommentar einfügen", "TODO einfügen"].allSatisfy(titles.contains), "contextMenuFormats")
+            check(!titles.contains("Schrift") && titles.contains("Ausschneiden"), "webKitFontMenuGone")
+            check(titles.first == "„Der“ ins Wiki aufnehmen", "rightClickMeansWordUnderMouse")
+            if let bold, let action = bold.action {
+                NSApp.sendAction(action, to: bold.target, from: bold)
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+            check(await text().hasPrefix("**Der** Regen"), "contextMenuBold")
+        } else {
+            check(false, "contextMenuPoint")
+        }
+        return (report, failures)
     }
 
     // MARK: Quotes

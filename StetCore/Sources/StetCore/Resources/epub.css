@@ -10,8 +10,12 @@ p {
   text-indent: 1.2em;
   text-align: justify;
 }
-h1 + p, h2 + p, h3 + p, .scene-break + p {
+h1 + p, h2 + p, h3 + p, .scene-break + p, blockquote + p, blockquote p:first-child {
   text-indent: 0;
+}
+blockquote {
+  margin: 0.9em 1.4em;
+  font-size: 0.94em;
 }
 h1, h2 {
   text-align: center;

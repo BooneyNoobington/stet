@@ -1,3 +1,4 @@
+import type { FormatKind, FormatState } from "./commands";
 import type { SearchMatch } from "./search";
 import type { Misspelling } from "./spelling";
 import type { EditorSettings } from "./settings";
@@ -15,7 +16,9 @@ export type HostMessage =
   | { type: "escape" }
   /** Sent on right-click, before the native menu opens: the selection (or the word under the
    *  mouse) and the wiki entry under the mouse, if any. */
-  | { type: "contextMenu"; text: string; wikiId: string | null; from: number; to: number };
+  | { type: "contextMenu"; text: string; wikiId: string | null; from: number; to: number }
+  /** Which formats the selection is in (sent when that changes), for the format buttons. */
+  | ({ type: "format" } & FormatState);
 
 export interface StressTestResult {
   words: number;
@@ -45,6 +48,11 @@ export interface StetEditorAPI {
   reveal(from: number, to: number): void;
   /** The main selection. */
   selection(): SearchMatch;
+  /** Italic, bold, quote, comment or TODO for the selection (see commands.ts); with a range,
+   *  that range is selected first (the right-click menu's word). Focuses the editor. */
+  format(kind: FormatKind, from?: number, to?: number): boolean;
+  /** Which formats the selection is in. */
+  formatState(): FormatState;
   /** Wraps the selection as `{==…==}{>>comment<<}`, or inserts `{>>comment<<}` at the cursor. */
   insertComment(comment: string): void;
   /** Wraps a range as `{==…==}{>>comment<<}`. */

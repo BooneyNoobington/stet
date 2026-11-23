@@ -11,11 +11,12 @@ import {
 
 /**
  * Live preview: hides Markdown syntax (emphasis marks, heading marks, thematic
- * breaks) unless the selection touches the construct. Only decorations are added;
- * the document text is never modified.
+ * breaks, quote marks) unless the selection touches the construct; quotes are indented.
+ * Only decorations are added; the document text is never modified.
  */
 
 const hidden = Decoration.replace({});
+const quoteLine = Decoration.line({ class: "stet-quote" });
 
 class SceneBreakWidget extends WidgetType {
   eq() {
@@ -64,6 +65,22 @@ function build(view: EditorView): DecorationSet {
             if (state.sliceDoc(end, end + 1) === " ") end++;
             if (end > mark.from) decorations.push(hidden.range(mark.from, end));
           }
+        } else if (name === "Blockquote") {
+          // Every line of the quote, once (nested quotes are inside it).
+          if (ref.node.parent?.name === "Blockquote") return;
+          const start = Math.max(ref.from, from);
+          const end = Math.min(ref.to, to);
+          for (let pos = state.doc.lineAt(start).from; pos <= end; ) {
+            const line = state.doc.lineAt(pos);
+            decorations.push(quoteLine.range(line.from));
+            pos = line.to + 1;
+          }
+        } else if (name === "QuoteMark") {
+          const line = state.doc.lineAt(ref.from);
+          if (selectionTouches(state, line.from, line.to)) return;
+          let end = ref.to;
+          if (state.sliceDoc(end, end + 1) === " ") end++;
+          decorations.push(hidden.range(ref.from, end));
         } else if (name === "HorizontalRule") {
           if (!selectionTouches(state, ref.from, ref.to)) {
             decorations.push(sceneBreak.range(ref.from, ref.to));

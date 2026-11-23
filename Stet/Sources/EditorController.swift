@@ -86,6 +86,8 @@ final class EditorController: NSObject, ObservableObject {
     @Published private(set) var isReady = false
     @Published private(set) var words = 0
     @Published private(set) var characters = 0
+    /// Which formats the selection is in (italic, bold, quote), for the format buttons.
+    @Published private(set) var formatState = FormatState()
     @Published var settings = EditorSettings.load() {
         didSet { settings.save() }
     }
@@ -277,6 +279,10 @@ extension EditorController: WKScriptMessageHandler {
             if let id = body["id"] as? String { onOpenWiki?(id) }
         case "escape":
             onEscape?()
+        case "format":
+            let state = FormatState(italic: body["italic"] as? Bool ?? false, bold: body["bold"] as? Bool ?? false,
+                                    quote: body["quote"] as? Bool ?? false)
+            if state != formatState { formatState = state }
         case "contextMenu":
             let from = (body["from"] as? NSNumber)?.intValue ?? 0
             let to = (body["to"] as? NSNumber)?.intValue ?? from
@@ -305,9 +311,27 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
 /// (spelling suggestions, Look Up etc. stay).
 final class StetWebView: WKWebView {
     var contextItems: (() -> [NSMenuItem])?
+    /// WebKit's font submenu: its items are WebKit's own commands for fonts and bold/italic
+    /// (ContextMenuAction 41 Schriften einblenden, 42 Fett, 43 Kursiv).
+    static func isWebKitFontMenu(_ item: NSMenuItem) -> Bool {
+        let tags = Set(item.submenu?.items.filter { $0.action.map(NSStringFromSelector) == "forwardContextMenuAction:" }.map(\.tag) ?? [])
+        return tags.isSuperset(of: [41, 42, 43])
+    }
+
+    /// The right-click menu while it's open (the self-test reads and closes it).
+    private(set) var openMenu: NSMenu?
+
+    override func didCloseMenu(_ menu: NSMenu, with event: NSEvent?) {
+        super.didCloseMenu(menu, with: event)
+        openMenu = nil
+    }
 
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
+        openMenu = menu
+        // WebKit's own "Schrift" submenu (Fett, Kursiv, Unterstrichen …) would format the
+        // editor's HTML, not the Markdown; Stet's format items take its place.
+        for item in menu.items where Self.isWebKitFontMenu(item) { menu.removeItem(item) }
         let items = contextItems?() ?? []
         guard !items.isEmpty else { return }
         menu.insertItem(.separator(), at: 0)

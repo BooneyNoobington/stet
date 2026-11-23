@@ -14,7 +14,9 @@ final class VisualExportCheck: TempDirTestCase {
         try book.updateManifest { $0.updateChapter(c1) { $0.title = "Die Ankunft" } }
         var s = try book.readScene(book.manifest.sceneIDs[0]); s.body = sample; try book.writeScene(s)
         let second = try book.addScene(toChapter: c1, after: s.id)
-        var s2 = try book.readScene(second.id); s2.body = sample; try book.writeScene(s2)
+        var s2 = try book.readScene(second.id)
+        s2.body = "Auf dem Tisch lag ein Zettel, in der Schrift ihres Vaters:\n\n> Bin beim Boot. Wenn das Gewitter kommt, schließ die Läden.\n>\n> *Und vergiss den Schlüssel nicht.*\n\n" + sample
+        try book.writeScene(s2)
         let ch2 = try book.addChapter(title: "Die Flut", after: c1)
         var s3 = try book.readScene(ch2.sceneIDs[0]); s3.body = sample; try book.writeScene(s3)
         try await book.saveVersion()

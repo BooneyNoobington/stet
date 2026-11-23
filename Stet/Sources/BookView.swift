@@ -37,6 +37,9 @@ struct BookView: View {
             ToolbarItem(placement: .navigation) {
                 VersionMenu(session: session)
             }
+            ToolbarItem(placement: .principal) {
+                FormatButtons(editor: editor)
+            }
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
                     Task { await session.saveVersion() }

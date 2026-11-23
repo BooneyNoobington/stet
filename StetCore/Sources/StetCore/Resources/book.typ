@@ -64,6 +64,8 @@ $endif$
   block(width: 100%, below: 2.4em, align(center, text(size: 14pt, style: "italic", weight: "regular", it.body)))
 }
 #show heading.where(level: 3): it => block(above: 1.4em, below: 0.9em, align(center, text(size: 9.5pt, tracking: 0.08em, upper(it.body))))
+// Quotes (a letter, an epigraph …): indented on both sides, a little smaller, with air around.
+#show quote.where(block: true): it => block(above: 1.1em, below: 1.1em, inset: (left: 1.2em, right: 1.2em), text(size: 9.5pt, it.body))
 
 // Titelei
 #set page(header: none, footer: none)

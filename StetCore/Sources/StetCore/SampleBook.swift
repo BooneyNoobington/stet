@@ -1,6 +1,6 @@
 import Foundation
 
-/// A small book to try Stet with: two chapters, four scenes, a comment and a TODO, a wiki
+/// A small book to try Stet with: two chapters, four scenes, a quote, a comment and a TODO, a wiki
 /// with a figure and a place, scene facts (one scene is a flashback), two versions, a milestone
 /// and an experiment with another ending. The text is Stet's own.
 public enum SampleBook {
@@ -20,7 +20,9 @@ public enum SampleBook {
         """)
         let past = try book.addScene(toChapter: firstChapter.id, after: arrival)
         try write(book, past.id, title: "Damals", facts: [Fact("Datum", "Sommer 1978"), Fact("Ort", "[[Seehaus]]")], body: """
-        Der Vater hatte das Boot jedes Frühjahr selbst gestrichen, jedes Mal in einer anderen Farbe. In dem Sommer, in dem Lene sieben wurde, war es gelb, und sie durfte zum ersten Mal allein hinausrudern.
+        Der Vater hatte das Boot jedes Frühjahr selbst gestrichen, jedes Mal in einer anderen Farbe. In dem Sommer, in dem Lene sieben wurde, war es gelb, und sie durfte zum ersten Mal allein hinausrudern. Auf die Ruderbank hatte er mit Bleistift geschrieben:
+
+        > Für Lene, die *Kapitänin*. Vor dem Gewitter bist du zurück.
 
         """)
 

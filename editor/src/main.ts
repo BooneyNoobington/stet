@@ -5,7 +5,7 @@ import { syntaxHighlighting } from "@codemirror/language";
 import { EditorState, type Extension, Transaction } from "@codemirror/state";
 import { EditorView, highlightActiveLine, keymap, type ViewUpdate } from "@codemirror/view";
 import type { HostMessage, StetEditorAPI, StressTestResult } from "./api";
-import { stetKeymap } from "./commands";
+import { type FormatState, formatState, runFormat, stetKeymap } from "./commands";
 import { commentRail, criticDecorations, criticField } from "./critic";
 import { startDevHarness } from "./dev";
 import { livePreview } from "./livePreview";
@@ -69,7 +69,19 @@ let lastActivity = 0;
 let lastStats: TextStats = { words: 0, characters: 0 };
 let statsTimer: number | undefined;
 
+let lastFormat = "";
+
+/** Tells the host which formats the selection is in, when that changes. */
+function postFormat(state: EditorState) {
+  const format: FormatState = formatState(state);
+  const key = JSON.stringify(format);
+  if (key === lastFormat) return;
+  lastFormat = key;
+  post({ type: "format", ...format });
+}
+
 function onUpdate(update: ViewUpdate) {
+  if ((update.docChanged || update.selectionSet) && !quiet) postFormat(update.state);
   if (!update.docChanged || quiet) return;
   post({ type: "changed" });
   const now = Date.now();
@@ -100,13 +112,16 @@ function extensions(): Extension[] {
       // Tell the host what was right-clicked, so the native menu can offer wiki items.
       contextmenu(event, view) {
         const wikiId = (event.target as HTMLElement).closest<HTMLElement>(".stet-wiki-term")?.dataset.wiki ?? null;
+        // The selection if the click is on it, else the word under the mouse (as on a Mac:
+        // a right-click elsewhere is about what's there, not about the selection).
         const selection = view.state.selection.main;
+        const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
         let from = selection.from;
         let to = selection.to;
-        if (!view.state.sliceDoc(from, to).trim()) {
-          const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        const onSelection = pos !== null && pos >= selection.from && pos <= selection.to;
+        if (!view.state.sliceDoc(from, to).trim() || (pos !== null && !onSelection)) {
           const word = pos === null ? null : view.state.wordAt(pos);
-          from = word?.from ?? from;
+          from = word?.from ?? pos ?? from;
           to = word?.to ?? from;
         }
         const text = view.state.sliceDoc(from, to);
@@ -177,6 +192,7 @@ const api: StetEditorAPI = {
     view.setState(EditorState.create({ doc: text, extensions: extensions() }));
     view.scrollDOM.scrollTop = 0;
     scheduleStats(0);
+    postFormat(view.state);
     return { length: text.length };
   },
   getText: () => view.state.doc.toString(),
@@ -229,6 +245,14 @@ const api: StetEditorAPI = {
     const range = view.state.selection.main;
     return { from: range.from, to: range.to };
   },
+  format(kind, from, to) {
+    if (from !== undefined && to !== undefined) {
+      const length = view.state.doc.length;
+      view.dispatch({ selection: { anchor: Math.max(0, Math.min(from, length)), head: Math.max(0, Math.min(to, length)) }, userEvent: "select" });
+    }
+    return runFormat(view, kind);
+  },
+  formatState: () => formatState(view.state),
   insertComment(comment) {
     const range = view.state.selection.main;
     const body = `{>>${comment}<<}`;

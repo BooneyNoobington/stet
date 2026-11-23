@@ -54,7 +54,7 @@ public enum Typography {
 
     /// Every quotation mark in one style: straight ones and typographic ones of any style. Whether
     /// a mark opens or closes depends on what comes before it, as when typing (emphasis stars
-    /// don't count). A single mark is an apostrophe inside a word (geht's), after a word when no
+    /// don't count; after `>`, as in `>"Ja"` or a comment `{>>"…`, it opens). A single mark is an apostrophe inside a word (geht's), after a word when no
     /// single quote is open (Andreas'), and at the start of a word when nothing closes it later
     /// in the paragraph ('n Abend). Changes only quotation marks, one character for another.
     public static func quotes(_ text: String, style: QuoteStyle) -> String {
@@ -73,7 +73,7 @@ public enum Typography {
         func isWordCharacter(_ c: Character?) -> Bool { c.map { $0.isLetter || $0.isNumber } ?? false }
         func isOpeningContext(_ previous: Character?) -> Bool {
             guard let previous else { return true }
-            return previous.isWhitespace || "([{–—-/".contains(previous)
+            return previous.isWhitespace || "([{–—-/>".contains(previous)
         }
         /// After what's already set: a quote right after an opening one opens too.
         func opens(_ previous: Character?) -> Bool {

@@ -192,11 +192,107 @@ enum SelfTest {
         editor.settings = savedSettings
         await editor.applySettings()
 
+        let formatted = await formatChecks(editor: editor)
+        report["format"] = formatted.report
+        failures += formatted.failures
+
         try? await editor.load(sample)
         for words in [15_000, 60_000] {
             report["stress\(words)"] = try? await editor.stressTest(words: words)
         }
         finish(report, failures: failures)
+    }
+
+    // MARK: - Formatting
+
+    /// The format commands on exact texts: italic and bold on and off (selection, word,
+    /// merging, per paragraph, inside a quote), quotes over several paragraphs and back,
+    /// a comment; the state the buttons show; the quote's look in the editor.
+    @MainActor
+    static func formatChecks(editor: EditorController) async -> (report: [String: Any], failures: [String]) {
+        var report: [String: Any] = [:]
+        var failures: [String] = []
+        func utf16(_ text: String, _ part: String) -> NSRange { (text as NSString).range(of: part) }
+        /// Loads `text`, selects `select` (a part of it, or a cursor before `cursorBefore`), formats, compares.
+        func run(_ name: String, _ text: String, select: String? = nil, cursorAt: Int? = nil, _ format: TextFormat, expect: String) async -> String {
+            try? await editor.load(text)
+            if let select {
+                let range = utf16(text, select)
+                await editor.select(from: range.location, to: NSMaxRange(range))
+            } else if let cursorAt {
+                await editor.select(from: cursorAt, to: cursorAt)
+            }
+            await editor.format(format)
+            let result = (try? await editor.text()) ?? ""
+            report[name] = result == expect ? true : result
+            if result != expect { failures.append("format: \(name)") }
+            return result
+        }
+        func state() async -> [String: Bool] {
+            ((try? await editor.call("return window.stet.formatState()")) as? [String: Bool]) ?? [:]
+        }
+
+        _ = await run("italicSelection", "Ein Wort hier.", select: "Wort", .italic, expect: "Ein *Wort* hier.")
+        let italicOn = await state()
+        // The selection stays on the word (inside the marks): the same button takes it off again.
+        await editor.format(.italic)
+        let off = (try? await editor.text()) ?? ""
+        report["italicOff"] = off == "Ein Wort hier."
+        if off != "Ein Wort hier." || italicOn["italic"] != true { failures.append("format: italic off / state") }
+        _ = await run("italicWordAtCursor", "Ein Wort hier.", cursorAt: 6, .italic, expect: "Ein *Wort* hier.")
+        _ = await run("italicOffAtCursor", "Ein *Wort* hier.", cursorAt: 7, .italic, expect: "Ein Wort hier.")
+        _ = await run("italicPairBetweenWords", "Ein Wort.", cursorAt: 3, .italic, expect: "Ein** Wort.")
+        _ = await run("boldWithoutSpaces", "Ein Wort hier.", select: "Wort ", .bold, expect: "Ein **Wort** hier.")
+        _ = await run("italicMerges", "Ein *Wort* hier und da.", select: "Ein *Wort* hier", .italic, expect: "*Ein Wort hier* und da.")
+        _ = await run("italicCutInto", "Ein *langes Wort* hier.", select: "Wort* hier", .italic, expect: "Ein *langes Wort hier*.")
+        _ = await run("italicPerParagraph", "Eins.\n\nZwei.", select: "Eins.\n\nZwei.", .italic, expect: "*Eins.*\n\n*Zwei.*")
+        _ = await run("italicInQuote", "> Ein Brief.", select: "> Ein Brief.", .italic, expect: "> *Ein Brief.*")
+        _ = await run("boldInsideItalic", "*Ein Wort hier.*", select: "Wort", .bold, expect: "*Ein **Wort** hier.*")
+
+        let letter = "Davor.\n\nBrief eins.\n\nBrief zwei.\n\nDanach."
+        let quoted = "Davor.\n\n> Brief eins.\n>\n> Brief zwei.\n\nDanach."
+        _ = await run("quoteParagraphs", letter, select: "Brief eins.\n\nBrief zwei.", .quote, expect: quoted)
+        let quoteOn = await state()
+        await editor.format(.quote)
+        let unquoted = (try? await editor.text()) ?? ""
+        report["quoteOff"] = unquoted == letter
+        if unquoted != letter || quoteOn["quote"] != true { failures.append("format: quote off / state") }
+        // Paragraph by paragraph: the second joins the first.
+        _ = await run("quoteOne", letter, cursorAt: 10, .quote, expect: "Davor.\n\n> Brief eins.\n\nBrief zwei.\n\nDanach.")
+        let joined = "Davor.\n\n> Brief eins.\n\nBrief zwei.\n\nDanach."
+        _ = await run("quoteJoins", joined, cursorAt: utf16(joined, "zwei").location, .quote, expect: quoted)
+        _ = await run("unquoteMiddle", "> a\n>\n> b\n>\n> c", cursorAt: 9, .quote, expect: "> a\n\nb\n\n> c")
+        _ = await run("commentOnSelection", "Ein Wort hier.", select: "Wort", .comment, expect: "Ein {==Wort==}{>><<} hier.")
+        _ = await run("todoAtCursor", "Ein Wort.", cursorAt: 9, .todo, expect: "Ein Wort.{>>TODO: <<}")
+
+        // The host hears about the state: italic at the cursor, then not.
+        try? await editor.load("Ein *Wort* hier.")
+        await editor.select(from: 6, to: 6)
+        try? await Task.sleep(for: .milliseconds(200))
+        let hostItalic = editor.formatState.italic
+        await editor.select(from: 13, to: 13)
+        try? await Task.sleep(for: .milliseconds(200))
+        report["hostState"] = hostItalic && !editor.formatState.italic
+        if !(hostItalic && !editor.formatState.italic) { failures.append("format: host state") }
+
+        // The quote's look: indented lines, `>` hidden unless the cursor is on the line.
+        try? await editor.load(quoted)
+        await editor.select(from: 0, to: 0)
+        try? await Task.sleep(for: .milliseconds(200))
+        let look = """
+            const lines = [...document.querySelectorAll('.cm-line.stet-quote')];
+            return { lines: lines.length, shown: lines.filter(l => l.textContent.startsWith('>')).length,
+                     indent: parseFloat(getComputedStyle(lines[0]).paddingLeft) }
+            """
+        let away = (try? await editor.call(look)) as? [String: Any] ?? [:]
+        await editor.select(from: utf16(quoted, "eins").location, to: utf16(quoted, "eins").location)
+        try? await Task.sleep(for: .milliseconds(200))
+        let onLine = (try? await editor.call(look)) as? [String: Any] ?? [:]
+        let lookOK = (away["lines"] as? Int) == 3 && (away["shown"] as? Int) == 0 && ((away["indent"] as? Double) ?? 0) > 10
+            && (onLine["shown"] as? Int) == 1
+        report["quoteLook"] = lookOK ? true : ["away": away, "onLine": onLine]
+        if !lookOK { failures.append("format: quote look") }
+        return (report, failures)
     }
 
     // MARK: - Window: full screen and resizing

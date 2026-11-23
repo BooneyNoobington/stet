@@ -108,6 +108,9 @@ struct StetCommands: Commands {
             Button("Backups einstellen …") { model.session?.sheet = .backup }
                 .disabled(model.session == nil)
         }
+        CommandMenu("Format") {
+            FormatMenu(model: model, editor: editor)
+        }
         CommandMenu("Buch") {
             Button("Wiki öffnen") { model.openWiki() }
                 .keyboardShortcut("w", modifiers: [.command, .option])

@@ -26,7 +26,7 @@ const LETTER_OR_DIGIT = /[\p{L}\p{N}]/u;
 function isOpeningContext(prev: string, style: (typeof QUOTES)[QuoteStyle]): boolean {
   return (
     prev === "" ||
-    /[\s([{–—\-/]/.test(prev) ||
+    /[\s([{–—\-/>]/.test(prev) ||
     prev === style.dOpen ||
     prev === style.sOpen
   );

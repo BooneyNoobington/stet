@@ -178,7 +178,8 @@ extension BookSession {
     func menuItems(text: String, range: NSRange, wikiID: String?) -> [NSMenuItem] {
         let spellingItems = hintMenuItems(at: range) + spellingMenuItems(word: text, range: range)
         let wikiItems = contextMenuItems(text: text, wikiID: wikiID)
-        return spellingItems + (spellingItems.isEmpty || wikiItems.isEmpty ? [] : [.separator()]) + wikiItems
+        let groups = [spellingItems, wikiItems, formatMenuItems(range: range)].filter { !$0.isEmpty }
+        return groups.enumerated().flatMap { index, items in (index == 0 ? [] : [NSMenuItem.separator()]) + items }
     }
 
     func spellingMenuItems(word: String, range: NSRange) -> [NSMenuItem] {

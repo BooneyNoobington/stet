@@ -15,6 +15,7 @@
   --stet-hl: rgba(232, 182, 60, 0.3);
   --stet-hl-todo: rgba(214, 98, 72, 0.18);
   --stet-raw-bg: rgba(138, 132, 122, 0.12);
+  --stet-quote-rule: rgba(138, 132, 122, 0.35);
   --stet-bubble-bg: #ffffff;
   --stet-bubble-border: #e7e2d8;
   --stet-todo: #b6492f;
@@ -36,6 +37,7 @@
     --stet-hl: rgba(232, 182, 60, 0.22);
     --stet-hl-todo: rgba(230, 120, 90, 0.22);
     --stet-raw-bg: rgba(143, 137, 127, 0.16);
+    --stet-quote-rule: rgba(143, 137, 127, 0.4);
     --stet-bubble-bg: #252421;
     --stet-bubble-border: #3a3834;
     --stet-todo: #f08a6c;

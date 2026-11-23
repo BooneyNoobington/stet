@@ -26,6 +26,12 @@ export const stetTheme = EditorView.theme({
     paddingRight: "calc(var(--stet-rail) + 56px)",
   },
   ".cm-line": { padding: "0" },
+  // Quotes (a letter, an epigraph …): indented on both sides, with a quiet rule on the left.
+  ".cm-line.stet-quote": {
+    padding: "0 1.6em 0 1.3em",
+    marginLeft: "0.3em",
+    borderLeft: "2px solid var(--stet-quote-rule)",
+  },
   ".cm-activeLine": { backgroundColor: "transparent" },
   "&.stet-focus .cm-line": { opacity: "0.28", transition: "opacity .25s ease" },
   "&.stet-focus .cm-line.cm-activeLine": { opacity: "1" },
@@ -39,7 +45,6 @@ export const proseHighlight = HighlightStyle.define([
   { tag: [t.heading3, t.heading4, t.heading5, t.heading6], fontSize: "1.15em", fontWeight: "600" },
   { tag: t.processingInstruction, color: "var(--stet-muted)" },
   { tag: t.contentSeparator, color: "var(--stet-muted)" },
-  { tag: t.quote, color: "var(--stet-muted)" },
   { tag: t.monospace, fontFamily: "var(--stet-mono)", fontSize: "0.9em" },
   { tag: t.link, color: "var(--stet-accent)" },
   { tag: t.url, color: "var(--stet-muted)" },

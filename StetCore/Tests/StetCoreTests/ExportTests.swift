@@ -104,7 +104,7 @@ final class ExportTests: TempDirTestCase {
         try book.writeScene(scene2)
         let chapter2 = try book.addChapter(title: "Die Flut", after: c1)
         var scene3 = try book.readScene(chapter2.sceneIDs[0])
-        scene3.body = "Das Wasser stieg schneller als erwartet.\n"
+        scene3.body = "Das Wasser stieg schneller als erwartet. Am Pegel hing ein Schild:\n\n> Pegel: 4,20 Meter.\n>\n> *Tendenz steigend.*\n"
         try book.writeScene(scene3)
         try await book.saveVersion()
         return book
@@ -128,6 +128,8 @@ final class ExportTests: TempDirTestCase {
         XCTAssertFalse(typst.contains("{>>") || typst.contains("Gisela") || typst.contains("TODO"), "comments are gone")
         XCTAssertTrue(typst.contains("sie… es war *nicht*"))
         XCTAssertTrue(typst.contains("›Herein‹, rief sie – und"))
+
+        XCTAssertTrue(typst.contains("> Pegel: 4,20 Meter.\n>\n> *Tendenz steigend.*"), "quotes stay Markdown quotes")
 
         let html = CombinedMarkdown.build(book, options: ExportOptions(format: .epub), stamp: stamp())
         XCTAssertTrue(html.contains(#"<p class="scene-break">⁂</p>"#))
@@ -194,6 +196,7 @@ final class ExportTests: TempDirTestCase {
         XCTAssertTrue(m.text.contains("Fassung \(manuscript.stamp.shortCommit)"))
         XCTAssertTrue(m.text.contains("»Wo ist der Wärter?«"))
         XCTAssertTrue(m.text.contains("noch nicht gesicherter Satz"))
+        XCTAssertTrue(m.text.contains("Pegel: 4,20 Meter."), "the quote is set")
         XCTAssertFalse(m.text.contains("Gisela"))
 
         let bookPDF = try await Exporter.export(book, options: ExportOptions(format: .pdfBook), to: out.appendingPathComponent("B.pdf"))
@@ -208,12 +211,16 @@ final class ExportTests: TempDirTestCase {
         XCTAssertTrue(chapter.contains("»Wo ist der Wärter?«"))
         let css = try await zipEntry(epub.file, "EPUB/styles/stylesheet1.css")
         XCTAssertTrue(css.contains("p.scene-break"))
+        XCTAssertTrue(css.contains("blockquote {"))
+        let flood = try await zipEntry(epub.file, "EPUB/text/ch002.xhtml")
+        XCTAssertTrue(flood.contains("<blockquote>\n<p>Pegel: 4,20 Meter.</p>\n<p><em>Tendenz steigend.</em></p>\n</blockquote>"), "one quote, two paragraphs")
 
         var docxOptions = ExportOptions(format: .docx)
         docxOptions.commentsAsAnnotations = true
         let docx = try await Exporter.export(book, options: docxOptions, to: out.appendingPathComponent("W.docx"))
         let document = try await zipEntry(docx.file, "word/document.xml")
         XCTAssertTrue(document.contains("Szenenwechsel"))
+        XCTAssertTrue(document.contains(#"<w:pStyle w:val="BlockText" />"#), "quotes get Word's quote style")
         XCTAssertTrue(document.contains("Fassung \(docx.stamp.shortCommit)"))
         let comments = try await zipEntry(docx.file, "word/comments.xml")
         XCTAssertTrue(comments.contains("Zu direkt?"))

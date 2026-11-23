@@ -53,6 +53,12 @@ $endif$
   block(width: 100%, below: 1.4cm, align(center, text(size: 13pt, weight: "regular", it.body)))
 }
 #show heading.where(level: 3): it => block(above: 1.6em, below: 1em, align(center, text(size: 11pt, style: "italic", it.body)))
+// Quotes (a letter, an epigraph …): indented on both sides, with air around and a smaller
+// indent for their own paragraphs (the full one on top of the quote's would look lost).
+#show quote.where(block: true): it => block(above: 2.1em, below: 2.1em, inset: (left: 1.25cm, right: 1.25cm), {
+  set par(first-line-indent: 0.6cm)
+  it.body
+})
 
 // Titelseite
 #page(header: none, footer: none)[

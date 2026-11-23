@@ -128,6 +128,7 @@ final class SampleBookTests: TempDirTestCase {
         XCTAssertEqual(book.wikiEntries().map(\.title).sorted(), ["Lene", "Seehaus"])
         let notes = book.manifest.sceneIDs.compactMap { try? book.readScene($0).body }.joined()
         XCTAssertTrue(notes.contains("{>>TODO:"))
+        XCTAssertTrue(notes.contains("\n\n> Für Lene, die *Kapitänin*."), "a quote, with italics")
         XCTAssertTrue(notes.contains("Jemand klopfte"), "the main version keeps its ending")
         let experiments = try await book.experiments()
         XCTAssertEqual(experiments.map(\.name), ["Anderes Ende"])
