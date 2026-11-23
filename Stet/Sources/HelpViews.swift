@@ -151,7 +151,7 @@ enum HelpContent {
         **Feedback** (Inspektor ▸ Feedback): Rückmeldungen von Testlesern mit Datum und Bezug auf einen Export. Word-Dateien mit Kommentaren liest Stet ein und setzt die Kommentare an die richtigen Stellen im heutigen Text.
         """),
         HelpTopic(id: "wiki", title: "Wiki, Fakten und Zeitleiste", symbol: "text.book.closed", text: """
-        Das **Wiki** (⌥⌘W) kennt Figuren, Orte, Begriffe und Notizen. Ihre Namen – auch andere Namen, mit Genitiv-s oder Apostroph – werden im Text dezent unterstrichen; beim Überfahren erscheinen die Fakten, ⌘-Klick öffnet den Eintrag. Neuer Eintrag: Namen markieren und ⌃⌘W, oder Rechtsklick auf den Namen.
+        Das **Wiki** (⌥⌘W) kennt Figuren, Orte, Begriffe und Notizen. Ihre Namen – auch andere Namen, mit Genitiv-s oder Apostroph – werden im Text dezent unterstrichen; beim Überfahren erscheinen die Fakten, ⌘-Klick öffnet den Eintrag. Neuer Eintrag: im Wiki-Fenster ＋ unten links, oder im Text den Namen markieren und ⌃⌘W, oder Rechtsklick auf den Namen.
 
         **Nicht gemeint:** Heißt eine Figur Andrea und kommt auch ein Andreas vor, trägst du bei Andrea „Andreas“ unter „Nicht gemeint“ ein.
 

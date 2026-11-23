@@ -22,6 +22,7 @@ private struct WikiBrowser: View {
     @ObservedObject var session: BookSession
     @ObservedObject var model: AppModel
     @State private var search = ""
+    @State private var newName = ""
 
     var body: some View {
         NavigationSplitView {
@@ -39,6 +40,20 @@ private struct WikiBrowser: View {
             }
             .searchable(text: $search, placement: .sidebar, prompt: "Suchen")
             .navigationSplitViewColumnWidth(min: 180, ideal: 220)
+            .safeAreaInset(edge: .bottom) { newEntryBar }
+            .alert(model.newWikiKind?.newLabel ?? "", isPresented: Binding(
+                get: { model.newWikiKind != nil },
+                set: { if !$0 { model.newWikiKind = nil } }
+            ), presenting: model.newWikiKind) { kind in
+                TextField("Name", text: $newName)
+                Button("Anlegen") { create(kind) }
+                Button("Abbrechen", role: .cancel) {}
+            } message: { kind in
+                Text(kind == .note ? "Wie soll die Notiz heißen?" : "Unter diesem Namen erkennt Stet den Eintrag im Text. Weitere Namen kannst du danach ergänzen.")
+            }
+            .onChange(of: model.newWikiKind) { _, kind in
+                if kind != nil { newName = "" }
+            }
             .toolbar {
                 Menu {
                     Button("Wiki aus anderem Buch übernehmen …") { session.chooseWikiToImport() }
@@ -48,17 +63,6 @@ private struct WikiBrowser: View {
                     Label("Übernehmen und exportieren", systemImage: "square.and.arrow.up.on.square")
                 }
                 .help("Das Wiki in ein anderes Buch mitnehmen, z. B. in eine Fortsetzung")
-                Menu {
-                    ForEach(WikiKind.allCases) { kind in
-                        Button(kind.newLabel) {
-                            if let entry = session.createWiki(title: kind == .note ? "Neue Notiz" : "Neu", kind: kind) {
-                                model.wikiSelection = entry.id
-                            }
-                        }
-                    }
-                } label: {
-                    Label("Neu", systemImage: "plus")
-                }
             }
         } detail: {
             if let id = model.wikiSelection, let entry = session.wiki.first(where: { $0.id == id }) {
@@ -67,7 +71,7 @@ private struct WikiBrowser: View {
                 ContentUnavailableView {
                     Label(session.wiki.isEmpty ? "Noch kein Wiki" : "Kein Eintrag ausgewählt", systemImage: "text.book.closed")
                 } description: {
-                    Text("Figuren, Orte, Begriffe: Ihre Namen werden im Text dezent unterstrichen, beim Überfahren erscheinen ihre Fakten. Tipp: Namen im Text markieren und ⌃⌘W, oder im Text rechtsklicken.")
+                    Text("Figuren, Orte, Begriffe: Ihre Namen werden im Text dezent unterstrichen, beim Überfahren erscheinen ihre Fakten. Neue Einträge mit ＋ unten links – oder Namen im Text markieren und ⌃⌘W, oder im Text rechtsklicken.")
                 } actions: {
                     if session.wiki.isEmpty {
                         Button("Wiki aus einem anderen Buch übernehmen …") { session.chooseWikiToImport() }
@@ -83,6 +87,38 @@ private struct WikiBrowser: View {
             Text(session.wikiNotice ?? "")
         }
         .onAppear { session.loadWiki() }
+    }
+
+    /// ＋ below the list, like the one below the book's chapters and scenes.
+    private var newEntryBar: some View {
+        HStack {
+            Menu {
+                ForEach(WikiKind.allCases) { kind in
+                    Button(kind.newLabel + " …") { model.newWikiKind = kind }
+                }
+            } label: {
+                Label("Neuer Eintrag", systemImage: "plus").labelStyle(.iconOnly)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Neue Figur, neuer Ort, Begriff oder Notiz")
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    /// A new entry under the typed name (its file is named after it), or the existing entry
+    /// if the wiki knows the name already.
+    private func create(_ kind: WikiKind) {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        model.newWikiKind = nil
+        search = ""
+        if let known = session.wiki.first(where: { $0.names.contains { $0.caseInsensitiveCompare(name) == .orderedSame } }) {
+            model.wikiSelection = known.id
+        } else if let entry = session.createWiki(title: name.isEmpty ? kind.newLabel : name, kind: kind) {
+            model.wikiSelection = entry.id
+        }
     }
 
     private var filtered: [WikiEntry] {

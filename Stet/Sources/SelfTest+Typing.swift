@@ -5,8 +5,9 @@ import SwiftUI
 /// `Stet --selftest-typing`: types into the inspector's details and a wiki entry's facts with
 /// real key events, the way a person does, and watches the window meanwhile. Nothing may move
 /// (the window, the editor, the fields, the inspector's scroll position), and the field being
-/// typed in must keep the keyboard focus and get every character. Uses a small test book of its
-/// own, deleted afterwards.
+/// typed in must keep the keyboard focus and get every character. Also: a new wiki entry from the
+/// ＋ below its list, chapters as headings in the navigator, the inspector's tabs staying at the
+/// top, the cover, find and replace. Uses a small test book of its own, deleted afterwards.
 extension SelfTest {
     @MainActor
     static func runTyping() async {
@@ -135,6 +136,9 @@ extension SelfTest {
                 } else {
                     failures.append("wikiFactNameField")
                 }
+                let added = await wikiNewEntryChecks(session: session, model: model, wiki: wiki)
+                report.merge(added.report) { _, new in new }
+                failures += added.failures
             } else {
                 failures.append("wikiWindow")
             }
@@ -145,7 +149,132 @@ extension SelfTest {
         let found = await findChecks(session: session, window: window)
         report.merge(found.report) { _, new in new }
         failures += found.failures
+        let laidOut = await layoutChecks(session: session, window: window)
+        report.merge(laidOut.report) { _, new in new }
+        failures += laidOut.failures
         finish(report, failures: failures)
+    }
+
+    /// The folder given after `--selftest-typing`, for pictures of the windows.
+    private static var pictureFolder: URL? {
+        guard let flag = CommandLine.arguments.firstIndex(of: "--selftest-typing"), CommandLine.arguments.indices.contains(flag + 1) else { return nil }
+        return URL(fileURLWithPath: CommandLine.arguments[flag + 1])
+    }
+
+    // MARK: New wiki entry
+
+    /// The ＋ below the wiki's list: choose a kind, type the name, Return; the entry is there
+    /// under that name (and its file named after it), selected. No second way in the toolbar.
+    @MainActor
+    private static func wikiNewEntryChecks(session: BookSession, model: AppModel, wiki: NSWindow) async -> (report: [String: Any], failures: [String]) {
+        var report: [String: Any] = [:]
+        var failures: [String] = []
+        func check(_ ok: Bool, _ name: String) {
+            report[name] = ok
+            if !ok { failures.append(name) }
+        }
+        let toolbar = wiki.toolbar?.items.map { $0.label.isEmpty ? $0.paletteLabel : $0.label } ?? []
+        report["wikiToolbar"] = toolbar
+        check(!toolbar.contains("Neu"), "wikiNewOnlyBelowList")
+        // The ＋: a pop-up button at the bottom of the list.
+        let sidebarRight = allViews(in: wiki).compactMap { $0 as? NSTableView }.map { frameInWindow($0).maxX }.min() ?? wiki.frame.width / 2
+        let plus = allViews(in: wiki).compactMap { $0 as? NSPopUpButton }.first { frameInWindow($0).maxX <= sidebarRight + 1 && frameInWindow($0).minY < 60 }
+        report["wikiPlusAt"] = plus.map { "x \(Int(frameInWindow($0).minX)), y \(Int(frameInWindow($0).minY)) from the bottom left" } ?? "none"
+        check(plus != nil, "wikiPlusBottomLeft")
+        if let folder = pictureFolder { await render(wiki, to: folder.appendingPathComponent("wiki.png")) }
+
+        /// Chooses a kind in the ＋ menu (what its items do; SwiftUI fills that menu only when it's
+        /// clicked), types the name into the dialog with key events, then Return. Returns what
+        /// the name field held when the dialog opened, nil without a dialog.
+        func addCharacter(named name: String) async -> String? {
+            model.newWikiKind = .character
+            try? await Task.sleep(for: .milliseconds(700))
+            guard let sheet = wiki.attachedSheet else { return nil }
+            if ((sheet.firstResponder as? NSTextView)?.delegate as? NSTextField) == nil,
+               let field = allViews(in: sheet).compactMap({ $0 as? NSTextField }).first(where: \.isEditable)
+            {
+                sheet.makeFirstResponder(field)
+            }
+            let initial = allViews(in: sheet).compactMap { $0 as? NSTextField }.first(where: \.isEditable)?.stringValue ?? ""
+            for character in name + "\r" {
+                let code: UInt16 = character == " " ? 49 : character == "\r" ? 36 : 0
+                guard let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                   windowNumber: sheet.windowNumber, context: nil, characters: String(character),
+                                                   charactersIgnoringModifiers: String(character), isARepeat: false, keyCode: code)
+                else { continue }
+                // Like NSApplication: the key window's key equivalents (Return = default button) first.
+                if !sheet.performKeyEquivalent(with: event) { sheet.sendEvent(event) }
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            try? await Task.sleep(for: .milliseconds(800))
+            return initial
+        }
+
+        check(await addCharacter(named: "Jonas Brand") != nil, "wikiNameDialog")
+        let created = session.wiki.first { $0.title == "Jonas Brand" }
+        report["wikiNewEntry"] = created.map { "\($0.id) (\($0.kind.label))" } ?? "none"
+        check(created?.id == "Jonas-Brand" && created?.kind == .character, "wikiNewEntryNamed")
+        check(created != nil && model.wikiSelection == created?.id, "wikiNewEntrySelected")
+        check(wiki.attachedSheet == nil, "wikiNameDialogCloses")
+
+        // A name that's already in the wiki opens that entry instead of making a second one.
+        let count = session.wiki.count
+        check(await addCharacter(named: "mara kessler") == "", "wikiNameDialogStartsEmpty")
+        let mara = session.wiki.first { $0.title == "Mara Kessler" }
+        check(session.wiki.count == count && mara != nil && model.wikiSelection == mara?.id, "wikiKnownNameOpensEntry")
+        return (report, failures)
+    }
+
+    // MARK: Navigator and inspector layout
+
+    /// Every chapter is a heading in the navigator, also a new one with a single scene; the
+    /// inspector's tabs stay at the top whichever tab is shown.
+    @MainActor
+    private static func layoutChecks(session: BookSession, window: NSWindow) async -> (report: [String: Any], failures: [String]) {
+        var report: [String: Any] = [:]
+        var failures: [String] = []
+        func check(_ ok: Bool, _ name: String) {
+            report[name] = ok
+            if !ok { failures.append(name) }
+        }
+        window.makeKeyAndOrderFront(nil)
+        let editor = frameInWindow(session.editor.webView)
+
+        func headings() -> Int {
+            guard let table = allViews(in: window).compactMap({ $0 as? NSTableView }).first(where: { frameInWindow($0).maxX <= editor.minX + 1 }) else { return -1 }
+            return (0..<table.numberOfRows).filter { table.rowView(atRow: $0, makeIfNecessary: true)?.isGroupRowStyle == true }.count
+        }
+        let chapters = session.manifest.chapters.count
+        report["navigatorHeadings"] = "\(headings()) for \(chapters) chapters"
+        check(headings() == chapters, "everyChapterIsAHeading")
+        session.addChapter(after: session.manifest.chapters.last?.id)
+        try? await Task.sleep(for: .milliseconds(800))
+        report["navigatorHeadingsAfterNewChapter"] = "\(headings()) for \(session.manifest.chapters.count) chapters"
+        check(session.manifest.chapters.count == chapters + 1 && headings() == chapters + 1, "newChapterIsAHeading")
+        if let folder = pictureFolder { await render(window, to: folder.appendingPathComponent("navigator.png")) }
+
+        guard let tabs = allViews(in: window).compactMap({ $0 as? NSSegmentedControl })
+            .filter({ $0.segmentCount == 4 && frameInWindow($0).minX >= editor.maxX - 1 })
+            .max(by: { frameInWindow($0).maxY < frameInWindow($1).maxY })
+        else {
+            failures.append("inspectorTabs")
+            return (report, failures)
+        }
+        var tops: [String: Int] = [:]
+        for index in 0..<tabs.segmentCount {
+            tabs.selectedSegment = index
+            tabs.sendAction(tabs.action, to: tabs.target)
+            try? await Task.sleep(for: .milliseconds(600))
+            tops[tabs.label(forSegment: index) ?? "\(index)"] = Int((window.contentView!.frame.height - frameInWindow(tabs).maxY).rounded())
+            if tabs.label(forSegment: index) == "Feedback", let folder = pictureFolder {
+                await render(window, to: folder.appendingPathComponent("feedback.png"))
+            }
+        }
+        report["inspectorTabsFromTop"] = tops
+        check(Set(tops.values).count == 1, "inspectorTabsStayAtTop")
+        tabs.selectedSegment = 0
+        tabs.sendAction(tabs.action, to: tabs.target)
+        return (report, failures)
     }
 
     // MARK: Cover

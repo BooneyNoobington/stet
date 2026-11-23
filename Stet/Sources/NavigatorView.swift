@@ -1,8 +1,8 @@
 import StetCore
 import SwiftUI
 
-/// The book's structure: parts (optional), chapters and scenes. A chapter with a single
-/// scene is shown as one row; the scene level appears once a chapter has more scenes.
+/// The book's structure: parts (optional), chapters and scenes. Every chapter is a heading
+/// with its scenes below, also when it has only one, so a new chapter looks like a chapter.
 struct NavigatorView: View {
     @ObservedObject var session: BookSession
     @State private var renaming: Chapter?
@@ -56,27 +56,22 @@ struct NavigatorView: View {
         }
     }
 
-    @ViewBuilder
     private func chapterSection(_ chapter: Chapter) -> some View {
-        if chapter.sceneIDs.count == 1, let only = chapter.sceneIDs.first {
-            sceneRow(only, label: chapter.title, chapter: chapter)
-        } else {
-            Section {
-                ForEach(chapter.sceneIDs, id: \.self) { sceneRow($0, chapter: chapter) }
-                    .onMove { session.moveScenes(inChapter: chapter.id, from: $0, to: $1) }
-            } header: {
-                Text(chapter.title)
-                    .contextMenu { chapterMenu(chapter) }
-            }
+        Section {
+            ForEach(chapter.sceneIDs, id: \.self) { sceneRow($0, chapter: chapter) }
+                .onMove { session.moveScenes(inChapter: chapter.id, from: $0, to: $1) }
+        } header: {
+            Text(chapter.title)
+                .contextMenu { chapterMenu(chapter) }
         }
     }
 
-    private func sceneRow(_ id: String, label: String? = nil, chapter: Chapter? = nil) -> some View {
+    private func sceneRow(_ id: String, chapter: Chapter? = nil) -> some View {
         HStack(spacing: 8) {
             Circle()
                 .fill(statusColor(session.statuses[id] ?? nil))
                 .frame(width: 7, height: 7)
-            Text(label ?? session.titles[id] ?? id)
+            Text(session.titles[id] ?? id)
                 .lineLimit(1)
             Spacer(minLength: 6)
             Text((session.wordCounts[id] ?? 0).formatted())
@@ -85,7 +80,7 @@ struct NavigatorView: View {
                 .foregroundStyle(.tertiary)
         }
         .tag(id)
-        .help(hoverText(id, chapterTitle: label))
+        .help(hoverText(id))
         .contextMenu {
             Button("Neue Szene danach") { session.addScene(after: id) }
             Menu("Status") {
@@ -150,10 +145,9 @@ struct NavigatorView: View {
         }
     }
 
-    /// Tooltip: scene title (if the row shows the chapter), status, synopsis.
-    private func hoverText(_ id: String, chapterTitle: String?) -> String {
+    /// Tooltip: status, synopsis, quick facts.
+    private func hoverText(_ id: String) -> String {
         var lines: [String] = []
-        if chapterTitle != nil, let title = session.titles[id] { lines.append(title) }
         if let status = session.statuses[id] ?? nil { lines.append(status.label) }
         if let synopsis = session.synopses[id] ?? nil { lines.append(synopsis) }
         for fact in session.sceneFacts[id] ?? [] { lines.append("\(fact.key): \(fact.displayValue)") }

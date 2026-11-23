@@ -42,6 +42,7 @@ struct NotesList: View {
                     systemImage: "text.bubble",
                     description: Text("⌥⌘M fügt einen Kommentar ein, ⌥⌘T ein TODO.")
                 )
+                .frame(maxHeight: .infinity)
             } else {
                 List {
                     ForEach(groups, id: \.sceneID) { group in
@@ -154,6 +155,7 @@ struct FeedbackPanel: View {
                     systemImage: "tray",
                     description: Text("Halte hier fest, was dir Leserinnen und Leser zurückgeben – als Text, Foto vom Ausdruck oder Word-Datei mit Kommentaren.")
                 )
+                .frame(maxHeight: .infinity)
             } else {
                 List {
                     let open = session.feedback.filter { !$0.isDone }

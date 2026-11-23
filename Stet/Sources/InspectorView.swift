@@ -26,12 +26,17 @@ struct InspectorView: View {
             .labelsHidden()
             .padding(10)
 
-            switch tab {
-            case .scene: DetailsForm(session: session)
-            case .history: HistoryList(session: session)
-            case .notes: NotesList(session: session)
-            case .feedback: FeedbackPanel(session: session)
+            Group {
+                switch tab {
+                case .scene: DetailsForm(session: session)
+                case .history: HistoryList(session: session)
+                case .notes: NotesList(session: session)
+                case .feedback: FeedbackPanel(session: session)
+                }
             }
+            // Every tab fills the rest of the column. Otherwise a short one (no notes or feedback
+            // yet) was centred together with the tabs, and the tabs jumped to the middle.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         // A fixed ideal width: otherwise the column follows its content, which gets wider while
         // a text field has the focus and narrower again whenever the book's file changes, so

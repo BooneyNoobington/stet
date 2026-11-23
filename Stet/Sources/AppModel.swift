@@ -32,6 +32,8 @@ final class AppModel: ObservableObject {
     @Published var importReport: Importer.Report?
     @Published var showCloneSheet = false
     @Published var wikiSelection: String?
+    /// The kind of wiki entry being named in the dialog of the wiki's ＋ menu.
+    @Published var newWikiKind: WikiKind?
     /// Set by the main window, so menu commands and the editor can open the wiki window.
     var openWindowAction: OpenWindowAction?
 
