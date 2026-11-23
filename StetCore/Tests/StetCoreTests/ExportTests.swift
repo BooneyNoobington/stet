@@ -4,6 +4,7 @@ import XCTest
 
 final class TypographyTests: XCTestCase {
     func t(_ text: String, _ quotes: ExportQuotes = .de) -> String { Typography.apply(text, quotes: quotes) }
+    func q(_ text: String, _ style: QuoteStyle = .guillemets) -> String { Typography.quotes(text, style: style) }
 
     func testGermanQuotes() {
         XCTAssertEqual(t(#""Hallo", sagte sie."#), "„Hallo“, sagte sie.")
@@ -18,6 +19,56 @@ final class TypographyTests: XCTestCase {
         XCTAssertEqual(t(#""Hallo""#, .guillemets), "»Hallo«")
         XCTAssertEqual(t(#""Hello," it's me."#, .en), "“Hello,” it’s me.")
         XCTAssertEqual(t(#""Bleibt" -- so..."#, .keep), #""Bleibt" -- so..."#)
+    }
+
+    func testEveryStyleBecomesOne() {
+        XCTAssertEqual(q(#""Ja", sagte sie. „Nein“, rief er. “Vielleicht”, »Gut« und «so»."#),
+                       "»Ja«, sagte sie. »Nein«, rief er. »Vielleicht«, »Gut« und »so«.")
+        XCTAssertEqual(q("'Ja' und ‚Nein‘ und ‘Gut’ und ›so‹."), "›Ja‹ und ›Nein‹ und ›Gut‹ und ›so‹.")
+        XCTAssertEqual(q("»Ja« und ›nein‹", .de), "„Ja“ und ‚nein‘")
+        XCTAssertEqual(q("„Ja“ und ‚nein‘", .en), "“Ja” und ‘nein’")
+    }
+
+    func testNestedAndEmphasis() {
+        XCTAssertEqual(q(#""Er sagte: 'Nein.'""#), "»Er sagte: ›Nein.‹«")
+        XCTAssertEqual(q(#""'Ja', hat er gesagt.""#), "»›Ja‹, hat er gesagt.«")
+        XCTAssertEqual(q(#""Das ist *gut*", sagte sie."#), "»Das ist *gut*«, sagte sie.")
+        XCTAssertEqual(q(#"*"Kursiv"* und _'auch'_"#), "*»Kursiv«* und _›auch‹_")
+        XCTAssertEqual(q("Sie rief – \"Halt!\" – und lief."), "Sie rief – »Halt!« – und lief.")
+    }
+
+    func testApostrophes() {
+        XCTAssertEqual(q("Geht's? Andreas' Hut, O'Neill"), "Geht’s? Andreas’ Hut, O’Neill")
+        XCTAssertEqual(q("So 'n Quatsch, sagte er."), "So ’n Quatsch, sagte er.")
+        XCTAssertEqual(q("'n Abend, 'Hallo', sagte er."), "’n Abend, ›Hallo‹, sagte er.")
+        XCTAssertEqual(q("'Geht's dir gut?', fragte sie."), "›Geht’s dir gut?‹, fragte sie.")
+        XCTAssertEqual(q("‘It’s fine’", .de), "‚It’s fine‘")
+        // A paragraph ends an open quote.
+        XCTAssertEqual(q("'offen\n'zu' und 's"), "’offen\n›zu‹ und ’s")
+    }
+
+    func testOnlyQuotesChange() {
+        let text = #"Ein "Satz" -- mit... 'allem'. {>>Kommentar "dazu"<<}"#
+        let converted = q(text)
+        XCTAssertEqual(converted, "Ein »Satz« -- mit... ›allem‹. {>>Kommentar »dazu«<<}")
+        XCTAssertEqual(converted.count, text.count)
+        XCTAssertEqual(Typography.changes(from: text, to: converted), 6)
+        XCTAssertEqual(q(converted), converted, "converting twice changes nothing")
+        XCTAssertEqual(q(q(converted, .de), .guillemets), converted, "and back again")
+    }
+
+    func testStandardStyle() {
+        XCTAssertEqual(QuoteStyle.standard(forLanguage: "de"), .guillemets)
+        XCTAssertEqual(QuoteStyle.standard(forLanguage: "de-AT"), .guillemets)
+        XCTAssertEqual(QuoteStyle.standard(forLanguage: "en-GB"), .en)
+        var manifest = Manifest(title: "T", authors: [], language: "de")
+        XCTAssertEqual(manifest.quoteStyle, .guillemets)
+        XCTAssertFalse(manifest.yaml().contains("quotes:"), "nothing written while the book follows its language")
+        manifest.quotes = .de
+        let parsed = try? Manifest.parse(manifest.yaml())
+        XCTAssertEqual(parsed?.quotes, .de)
+        XCTAssertEqual(parsed?.quoteStyle, .de)
+        XCTAssertEqual(parsed?.unknown.count, 0)
     }
 
     func testDashesAndEllipses() {
@@ -72,11 +123,11 @@ final class ExportTests: TempDirTestCase {
         XCTAssertTrue(typst.contains("\n# Ankunft\n"))
         XCTAssertTrue(typst.contains("\n# Die Flut\n"))
         XCTAssertTrue(typst.contains("```{=typst}\n#scenebreak()\n```"), "a scene break between the two scenes")
-        XCTAssertTrue(typst.contains("„Wo ist der Wärter?“, fragte sie."))
+        XCTAssertTrue(typst.contains("»Wo ist der Wärter?«, fragte sie."))
         XCTAssertTrue(typst.contains("Die Lichter waren verschwunden."))
         XCTAssertFalse(typst.contains("{>>") || typst.contains("Gisela") || typst.contains("TODO"), "comments are gone")
         XCTAssertTrue(typst.contains("sie… es war *nicht*"))
-        XCTAssertTrue(typst.contains("‚Herein‘, rief sie – und"))
+        XCTAssertTrue(typst.contains("›Herein‹, rief sie – und"))
 
         let html = CombinedMarkdown.build(book, options: ExportOptions(format: .epub), stamp: stamp())
         XCTAssertTrue(html.contains(#"<p class="scene-break">⁂</p>"#))
@@ -141,7 +192,7 @@ final class ExportTests: TempDirTestCase {
         XCTAssertGreaterThanOrEqual(m.pages, 3, "title page + two chapters")
         XCTAssertTrue(m.text.contains("Der Leuchtturm"))
         XCTAssertTrue(m.text.contains("Fassung \(manuscript.stamp.shortCommit)"))
-        XCTAssertTrue(m.text.contains("„Wo ist der Wärter?“"))
+        XCTAssertTrue(m.text.contains("»Wo ist der Wärter?«"))
         XCTAssertTrue(m.text.contains("noch nicht gesicherter Satz"))
         XCTAssertFalse(m.text.contains("Gisela"))
 
@@ -154,7 +205,7 @@ final class ExportTests: TempDirTestCase {
         let epub = try await Exporter.export(book, options: ExportOptions(format: .epub), to: out.appendingPathComponent("E.epub"))
         let chapter = try await zipEntry(epub.file, "EPUB/text/ch001.xhtml")
         XCTAssertTrue(chapter.contains("scene-break"))
-        XCTAssertTrue(chapter.contains("„Wo ist der Wärter?“"))
+        XCTAssertTrue(chapter.contains("»Wo ist der Wärter?«"))
         let css = try await zipEntry(epub.file, "EPUB/styles/stylesheet1.css")
         XCTAssertTrue(css.contains("p.scene-break"))
 

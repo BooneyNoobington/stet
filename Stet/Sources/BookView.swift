@@ -98,6 +98,17 @@ struct BookView: View {
         } message: {
             Text(session.proofMessage ?? "")
         }
+        .confirmationDialog(
+            session.quoteConversion.map { "Anführungszeichen im Buch als \($0.style.sample) setzen?" } ?? "",
+            isPresented: Binding(get: { session.quoteConversion != nil }, set: { if !$0 { session.quoteConversion = nil } }),
+            presenting: session.quoteConversion
+        ) { conversion in
+            Button("Angleichen") { Task { await session.convertQuotes() } }
+            Button(conversion.afterChange ? "Nur beim Tippen" : "Abbrechen", role: .cancel) {}
+        } message: { conversion in
+            let place = conversion.scenes == 1 ? "einer Szene" : "\(conversion.scenes) Szenen"
+            Text("\(conversion.marks.formatted()) Anführungszeichen in \(place) sehen noch anders aus: gerade (\" und ') aus importiertem oder eingefügtem Text, oder solche in einem anderen Stil. Der Stand davor bleibt als Schnappschuss im Verlauf.")
+        }
         .alert("Fehler", isPresented: Binding(get: { session.errorMessage != nil }, set: { if !$0 { session.errorMessage = nil } })) {
             Button("OK") { session.errorMessage = nil }
         } message: {

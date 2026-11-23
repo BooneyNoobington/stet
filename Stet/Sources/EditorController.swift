@@ -1,4 +1,5 @@
 import AppKit
+import StetCore
 import WebKit
 
 /// Display settings for the writing pane (mirrors `EditorSettings` in editor/src/settings.ts).
@@ -15,23 +16,12 @@ struct EditorSettings: Equatable, Codable {
         }
     }
 
-    enum Quotes: String, CaseIterable, Identifiable, Codable {
-        case de, guillemets, en
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .de: "„Deutsch“"
-            case .guillemets: "»Buch«"
-            case .en: "“English”"
-            }
-        }
-    }
-
     var font: Font = .serif
     var fontSize: Double = 19
     var lineHeight: Double = 1.65
     var columnWidth: Double = 36
-    var quotes: Quotes = .de
+    /// The open book's quotation marks (set from its manifest).
+    var quotes: QuoteStyle = .guillemets
     var language = "de"
     var showComments = true
     var focusMode = false
@@ -49,7 +39,7 @@ struct EditorSettings: Equatable, Codable {
         fontSize = try c.decodeIfPresent(Double.self, forKey: .fontSize) ?? d.fontSize
         lineHeight = try c.decodeIfPresent(Double.self, forKey: .lineHeight) ?? d.lineHeight
         columnWidth = try c.decodeIfPresent(Double.self, forKey: .columnWidth) ?? d.columnWidth
-        quotes = try c.decodeIfPresent(Quotes.self, forKey: .quotes) ?? d.quotes
+        quotes = (try? c.decodeIfPresent(QuoteStyle.self, forKey: .quotes)) ?? d.quotes
         language = try c.decodeIfPresent(String.self, forKey: .language) ?? d.language
         showComments = try c.decodeIfPresent(Bool.self, forKey: .showComments) ?? d.showComments
         focusMode = try c.decodeIfPresent(Bool.self, forKey: .focusMode) ?? d.focusMode
@@ -71,10 +61,6 @@ struct EditorSettings: Equatable, Codable {
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: Self.defaultsKey)
         }
-    }
-
-    static func quotes(forLanguage language: String) -> Quotes {
-        language.lowercased().hasPrefix("en") ? .en : .de
     }
 
     var dictionary: [String: Any] {

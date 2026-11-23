@@ -152,7 +152,118 @@ extension SelfTest {
         let laidOut = await layoutChecks(session: session, window: window)
         report.merge(laidOut.report) { _, new in new }
         failures += laidOut.failures
+        let quoted = await quoteChecks(session: session, window: window)
+        report.merge(quoted.report) { _, new in new }
+        failures += quoted.failures
         finish(report, failures: failures)
+    }
+
+    // MARK: Quotes
+
+    /// The book's quotation marks: chevrons for a German book; typed quotes (with the keys of a
+    /// German keyboard, ⇧2 and ⇧#) become typographic ones in each style; changing the style
+    /// offers to convert the book's existing ones, and converting changes every scene.
+    @MainActor
+    private static func quoteChecks(session: BookSession, window: NSWindow) async -> (report: [String: Any], failures: [String]) {
+        var report: [String: Any] = [:]
+        var failures: [String] = []
+        func check(_ ok: Bool, _ name: String) {
+            report[name] = ok
+            if !ok { failures.append(name) }
+        }
+        for other in NSApp.windows where other !== window && other.isVisible { other.close() }
+        window.makeKeyAndOrderFront(nil)
+        let scenes = session.manifest.sceneIDs
+        await session.select(scenes[0])
+        try? await Task.sleep(for: .milliseconds(300))
+        let editor = AppModel.shared.editor
+        check(session.manifest.quotes == nil && session.manifest.quoteStyle == .guillemets && editor.settings.quotes == .guillemets,
+              "germanBookUsesChevrons")
+
+        func type(_ text: String) async {
+            for character in text {
+                // ⇧2 and ⇧# on a German keyboard; letters and the rest as plain keys.
+                let (code, shift): (UInt16, Bool) = switch character {
+                case "\"": (19, true)
+                case "'": (42, true)
+                case " ": (49, false)
+                default: (0, false)
+                }
+                // Through the app's event queue, like a real key: the menus see it first.
+                for type in [NSEvent.EventType.keyDown, .keyUp] {
+                    guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: shift ? .shift : [],
+                                                       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                       context: nil, characters: String(character), charactersIgnoringModifiers: String(character),
+                                                       isARepeat: false, keyCode: code)
+                    else { continue }
+                    NSApp.postEvent(event, atStart: false)
+                }
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        // Ends in emphasis: a quote right after the opening star opens.
+        let typed = "\"Ja\", sagte sie. 'Nein' Maras Hund's *\"so\"*"
+        var results: [String: String] = [:]
+        var offers: [String: String] = [:]
+        for style in QuoteStyle.allCases {
+            // As in the inspector: the book gets the style, and the text has marks of another one.
+            session.setQuoteStyle(style)
+            try? await Task.sleep(for: .milliseconds(600))
+            if let offer = session.quoteConversion {
+                offers[style.rawValue] = "\(offer.marks) in \(offer.scenes), sheet \(window.attachedSheet != nil)"
+                if let sheet = window.attachedSheet, let folder = pictureFolder, offers.count == 1 {
+                    await render(sheet, to: folder.appendingPathComponent("quotes.png"))
+                }
+                session.quoteConversion = nil  // "Nur beim Tippen"
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            check(session.manifest.quoteStyle == style && editor.settings.quotes == style, "quoteStyle\(style.rawValue)Set")
+            let length = ((try? await editor.text()) ?? "" as String).utf16.count
+            await editor.select(from: length, to: length)
+            window.makeFirstResponder(editor.webView)
+            await type("\n" + typed)
+            let text = (try? await editor.text()) ?? ""
+            results[style.rawValue] = String(text.split(separator: "\n").last ?? "")
+        }
+        report["typedQuotes"] = results
+        report["quoteOffers"] = offers
+        check(results["guillemets"] == "»Ja«, sagte sie. ›Nein‹ Maras Hund’s *»so«*", "quotesChevrons")
+        check(results["de"] == "„Ja“, sagte sie. ‚Nein‘ Maras Hund’s *„so“*", "quotesGerman")
+        check(results["en"] == "“Ja”, sagte sie. ‘Nein’ Maras Hund’s *“so”*", "quotesEnglish")
+        // No offer while the text has no other marks; then one for the line typed before.
+        check(offers["guillemets"] == nil && offers["de"] == "6 in 1, sheet true" && offers["en"] == "12 in 1, sheet true", "styleChangeOffersConversion")
+        check(window.attachedSheet == nil, "offerDeclined")
+        check((try? Manifest.parse(String(contentsOf: session.book.url.appendingPathComponent(Manifest.fileName), encoding: .utf8)))?.quotes == .en,
+              "quoteStyleInManifest")
+
+        // Straight quotes in another scene, as after pasting or importing; then back to chevrons.
+        if var other = try? session.book.readScene(scenes[1]) {
+            other.body += "\"Ja\", sagte sie. 'Nein.' Geht's?\n"
+            _ = try? session.book.writeScene(other)
+            session.sceneFilesChanged()
+        }
+        session.setQuoteStyle(.guillemets)
+        try? await Task.sleep(for: .milliseconds(600))
+        let offer = session.quoteConversion
+        report["quoteOffer"] = offer.map { "\($0.marks) in \($0.scenes)" } ?? "none"
+        // 12 in the lines typed in the other styles, 5 in the other scene (the apostrophe in Geht's too).
+        check(offer?.marks == 17 && offer?.scenes == 2 && offer?.afterChange == true, "conversionCountsEveryScene")
+        await session.convertQuotes()
+        try? await Task.sleep(for: .milliseconds(500))
+        let shown = ((try? await editor.text()) ?? "").split(separator: "\n").suffix(3).map(String.init)
+        let other = (try? session.book.readScene(scenes[1]).body) ?? ""
+        report["quotesConverted"] = ["shown": shown, "other": other.split(separator: "\n").last.map(String.init) ?? ""]
+        check(shown == Array(repeating: "»Ja«, sagte sie. ›Nein‹ Maras Hund’s *»so«*", count: 3), "conversionInShownScene")
+        check(other.hasSuffix("»Ja«, sagte sie. ›Nein.‹ Geht’s?\n"), "conversionInOtherScene")
+        check(session.toast?.message.hasPrefix("17 Anführungszeichen in 2 Szenen") == true, "conversionToast")
+        await session.persist()
+        check((try? session.book.readScene(scenes[0]).body)?.contains("„") == false, "conversionSaved")
+
+        // From the menu, with nothing left to change: no question, a note instead.
+        await session.offerQuoteConversion()
+        check(session.quoteConversion == nil && session.toast?.message.contains("schon »…«") == true, "nothingLeftToConvert")
+        return (report, failures)
     }
 
     /// The folder given after `--selftest-typing`, for pictures of the windows.

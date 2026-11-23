@@ -25,16 +25,16 @@ extension BookSession {
         }
     }
 
-    var defaultExportQuotes: ExportQuotes {
-        manifest.language.lowercased().hasPrefix("en") ? .en : .de
-    }
+    /// The book's quotation marks (chosen in the inspector).
+    var defaultExportQuotes: ExportQuotes { ExportQuotes(manifest.quoteStyle) }
 }
 
 struct ExportSheet: View {
     @ObservedObject var session: BookSession
     @Environment(\.dismiss) private var dismiss
     @AppStorage("ExportFormat") private var formatRaw = ExportFormat.pdfManuscript.rawValue
-    @AppStorage("ExportQuotes") private var quotesRaw = ""
+    /// Starts with the book's quotation marks each time.
+    @State private var quotesRaw = ""
     @AppStorage("ExportWordComments") private var wordComments = false
     @AppStorage("ExportSceneTitles") private var sceneTitles = false
     @State private var result: ExportResult?
@@ -77,7 +77,7 @@ struct ExportSheet: View {
             Picker("Anführungszeichen", selection: Binding(get: { quotes.rawValue }, set: { quotesRaw = $0 })) {
                 ForEach(ExportQuotes.allCases) { Text($0.label).tag($0.rawValue) }
             }
-            .help("Gerade Anführungszeichen (\") werden in diese Form gebracht; dazu Apostroph, Gedankenstrich und Auslassungspunkte.")
+            .help("Alle Anführungszeichen werden in diese Form gebracht, gerade (\") wie solche in einem anderen Stil; dazu Apostroph, Gedankenstrich und Auslassungspunkte. Voreingestellt: die des Buchs (im Inspektor).")
             Toggle("Szenentitel als Zwischenüberschriften", isOn: $sceneTitles)
             if format.supportsWordComments {
                 Toggle("Kommentare und TODOs als Kommentare mitnehmen", isOn: $wordComments)

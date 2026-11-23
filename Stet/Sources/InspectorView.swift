@@ -149,6 +149,13 @@ private struct DetailsForm: View {
                     get: { session.manifest.language },
                     set: { value in session.updateBook { $0.language = value } }
                 ))
+                Picker("Anführungszeichen", selection: Binding(
+                    get: { session.manifest.quoteStyle },
+                    set: { session.setQuoteStyle($0) }
+                )) {
+                    ForEach(QuoteStyle.allCases) { Text($0.label).tag($0) }
+                }
+                .help("Getippte \" und ' werden zu diesen Zeichen, und Exporte setzen sie ebenso. Vorhandene gleicht „Buch > Anführungszeichen angleichen …“ an.")
                 LabeledContent("Titelbild") { CoverControl(session: session) }
                 LabeledContent("Wörter", value: session.totalWords.formatted())
                 TextField("Fakten-Felder", text: Binding(

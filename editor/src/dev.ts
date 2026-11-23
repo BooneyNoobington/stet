@@ -19,7 +19,7 @@ export async function startDevHarness(api: StetEditorAPI) {
     <label>Größe <input data-setting="fontSize" type="number" min="12" max="32" step="1" value="19"></label>
     <label>Anführungszeichen
       <select data-setting="quotes">
-        <option value="de">„Deutsch“</option><option value="guillemets">»Buch«</option><option value="en">“English”</option>
+        <option value="guillemets">»Buch«</option><option value="de">„Deutsch“</option><option value="en">“English”</option>
       </select>
     </label>
     <label><input data-setting="showComments" type="checkbox" checked> Kommentare</label>

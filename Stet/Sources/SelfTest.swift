@@ -1068,6 +1068,37 @@ enum SelfTest {
             check(false, "statsLoaded")
         }
 
+        // Quotation marks: the whole book in its style (numbers only, no text). No straight ones
+        // are left, converting again changes nothing, and per paragraph the opening and closing
+        // marks are counted (a quote over several paragraphs leaves some open, that's fine).
+        let style = session.manifest.quoteStyle
+        await session.offerQuoteConversion()
+        let offered = session.quoteConversion
+        report["quotesOffered"] = offered.map { ["marks": $0.marks, "scenes": $0.scenes] } ?? [:]
+        await session.convertQuotes()
+        await session.persist()
+        var straight = 0, apostrophes = 0, doublePairs = 0, singlePairs = 0, unevenDouble = 0, unevenSingle = 0
+        let m = style.marks
+        for id in session.manifest.sceneIDs {
+            let body = (try? book.readScene(id).body) ?? ""
+            straight += body.filter { $0 == "\"" || $0 == "'" }.count
+            apostrophes += body.filter { $0 == "’" && m.sClose != "’" }.count
+            for paragraph in body.split(separator: "\n") {
+                let d = (paragraph.filter { $0 == m.dOpen }.count, paragraph.filter { $0 == m.dClose }.count)
+                let q = (paragraph.filter { $0 == m.sOpen }.count, paragraph.filter { $0 == m.sClose }.count)
+                doublePairs += min(d.0, d.1)
+                singlePairs += min(q.0, q.1)
+                if d.0 != d.1 { unevenDouble += 1 }
+                if q.0 != q.1 { unevenSingle += 1 }
+            }
+        }
+        report["quotesAfter"] = ["style": style.rawValue, "straightLeft": straight, "doublePairs": doublePairs, "singlePairs": singlePairs,
+                                 "apostrophes": apostrophes, "paragraphsUnevenDouble": unevenDouble, "paragraphsUnevenSingle": unevenSingle]
+        check(straight == 0, "noStraightQuotesLeft")
+        session.quoteConversion = nil
+        await session.offerQuoteConversion()
+        check(session.quoteConversion == nil, "quotesConvertOnce")
+
         // Health and location
         check((await HealthCheck.run(book)).isHealthy, "healthy")
         check(SyncLocation.detect(destination) == nil, "tempFolderNotSynced")

@@ -58,14 +58,25 @@ public enum ExportFormat: String, CaseIterable, Identifiable {
 }
 
 public enum ExportQuotes: String, CaseIterable, Identifiable {
-    case de, guillemets, en, keep
+    case guillemets, de, en, keep
     public var id: String { rawValue }
-    public var label: String {
+    public var label: String { style?.label ?? "unverändert" }
+
+    public init(_ style: QuoteStyle) {
+        switch style {
+        case .guillemets: self = .guillemets
+        case .de: self = .de
+        case .en: self = .en
+        }
+    }
+
+    /// nil: the text's quotes stay as they are.
+    public var style: QuoteStyle? {
         switch self {
-        case .de: "„Deutsch“"
-        case .guillemets: "»Buch«"
-        case .en: "“English”"
-        case .keep: "unverändert"
+        case .guillemets: .guillemets
+        case .de: .de
+        case .en: .en
+        case .keep: nil
         }
     }
 }
@@ -78,7 +89,7 @@ public struct ExportOptions: Equatable {
     /// Show scene titles as small headings.
     public var sceneTitles = false
 
-    public init(format: ExportFormat, quotes: ExportQuotes = .de) {
+    public init(format: ExportFormat, quotes: ExportQuotes = .guillemets) {
         self.format = format
         self.quotes = quotes
     }
@@ -100,72 +111,6 @@ public struct ExportStamp: Equatable {
     public var line: String {
         let version = versionName == "Hauptfassung" ? "" : " (\(versionName))"
         return "Fassung \(shortCommit)\(version) vom \(dateText)"
-    }
-}
-
-// MARK: - Typography
-
-public enum Typography {
-    struct Marks { let dOpen, dClose, sOpen, sClose: Character }
-
-    static func marks(_ quotes: ExportQuotes) -> Marks? {
-        switch quotes {
-        case .de: Marks(dOpen: "„", dClose: "“", sOpen: "‚", sClose: "‘")
-        case .guillemets: Marks(dOpen: "»", dClose: "«", sOpen: "›", sClose: "‹")
-        case .en: Marks(dOpen: "“", dClose: "”", sOpen: "‘", sClose: "’")
-        case .keep: nil
-        }
-    }
-
-    /// Typographic quotes (straight and already curly ones in the target style), apostrophes,
-    /// dashes between spaces and ellipses — the same rules as typing in the editor.
-    public static func apply(_ text: String, quotes: ExportQuotes) -> String {
-        guard let m = marks(quotes) else { return text }
-        var out = ""
-        out.reserveCapacity(text.utf8.count)
-        var paragraphOpenSingle = false
-        var previous: Character?
-        let chars = Array(text)
-        var i = 0
-        func isOpening(_ p: Character?) -> Bool {
-            guard let p else { return true }
-            return p.isWhitespace || "([{–—-/*_".contains(p) || p == m.dOpen || p == m.sOpen
-        }
-        while i < chars.count {
-            let c = chars[i]
-            if c == "\n" { paragraphOpenSingle = false }
-            switch c {
-            case "\"":
-                out.append(isOpening(previous) ? m.dOpen : m.dClose)
-            case "'":
-                if let p = previous, p.isLetter || p.isNumber {
-                    if paragraphOpenSingle && quotes != .en {
-                        out.append(m.sClose)
-                        paragraphOpenSingle = false
-                    } else {
-                        out.append("’")
-                    }
-                } else if isOpening(previous) {
-                    out.append(m.sOpen)
-                    paragraphOpenSingle = true
-                } else {
-                    out.append(m.sClose)
-                    paragraphOpenSingle = false
-                }
-            case "." where i + 2 < chars.count && chars[i + 1] == "." && chars[i + 2] == ".":
-                out.append("…")
-                i += 2
-            case "-" where i + 1 < chars.count && chars[i + 1] == "-" && (i + 2 >= chars.count || chars[i + 2] != "-")
-                && (previous == nil || previous!.isWhitespace) && (i + 2 >= chars.count || chars[i + 2].isWhitespace):
-                out.append("–")
-                i += 1
-            default:
-                out.append(c)
-            }
-            previous = out.last
-            i += 1
-        }
-        return out
     }
 }
 

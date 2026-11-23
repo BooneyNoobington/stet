@@ -139,6 +139,8 @@ struct StetCommands: Commands {
             }
             .keyboardShortcut(";", modifiers: [.command, .shift])
             .disabled(model.session == nil)
+            Button("Anführungszeichen angleichen …") { Task { await model.session?.offerQuoteConversion() } }
+                .disabled(model.session == nil)
             Divider()
             Button("Mit dem Server abgleichen") { Task { await model.session?.syncNow() } }
                 .keyboardShortcut("s", modifiers: [.command, .control])
@@ -210,9 +212,6 @@ struct StetCommands: Commands {
                 .keyboardShortcut("+")
             Button("Kleiner") { editor.settings.fontSize = max(12, editor.settings.fontSize - 1) }
                 .keyboardShortcut("-")
-            Picker("Anführungszeichen", selection: $editor.settings.quotes) {
-                ForEach(EditorSettings.Quotes.allCases) { Text($0.label).tag($0) }
-            }
             Toggle("Kommentare zeigen", isOn: $editor.settings.showComments)
                 .keyboardShortcut("k", modifiers: [.command, .shift])
             Toggle("Fokusmodus", isOn: $editor.settings.focusMode)

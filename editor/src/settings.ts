@@ -26,7 +26,7 @@ export const defaultSettings: EditorSettings = {
   fontSize: 19,
   lineHeight: 1.65,
   columnWidth: 36,
-  quotes: "de",
+  quotes: "guillemets",
   language: "de",
   showComments: true,
   focusMode: false,

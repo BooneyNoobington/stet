@@ -4,11 +4,14 @@ import { type QuoteStyle, settingsField } from "./settings";
 
 /**
  * Typographic substitutions while typing:
- *   "  → „ “ / » « / “ ”   (per book language)
- *   '  → ‚ ‘ / › ‹ / ‘ ’, or ’ as an apostrophe after a letter
+ *   "  → » « / „ “ / “ ”   (the book's style)
+ *   '  → › ‹ / ‚ ‘ / ‘ ’, or ’ as an apostrophe after a letter
  *   " -- " → " – "        (only between spaces, so CriticMarkup `{--` stays intact)
  *   "..."  → "…"
- * Each substitution is its own undo step; ⌘Z right after restores the plain character.
+ * Whether a quote opens or closes depends on what comes before it, emphasis stars aside
+ * (*"Ja"*, "*gut*"): the same rules as `Typography` in StetCore, which exports and
+ * "Anführungszeichen angleichen" use. Each substitution is its own undo step; ⌘Z right after
+ * restores the plain character.
  */
 
 const QUOTES: Record<QuoteStyle, { dOpen: string; dClose: string; sOpen: string; sClose: string }> = {
@@ -40,6 +43,7 @@ export const typography = EditorView.inputHandler.of((view, from, to, text) => {
 
   if (text === '"' || text === "'") {
     const style = QUOTES[state.field(settingsField).quotes];
+    const significant = state.sliceDoc(Math.max(0, from - 12), from).replace(/[*_]+$/, "").slice(-1);
     if (text === "'" && LETTER_OR_DIGIT.test(prev)) {
       // After a letter it's an apostrophe, unless a single quote is open in this paragraph.
       const line = state.doc.lineAt(from);
@@ -47,7 +51,7 @@ export const typography = EditorView.inputHandler.of((view, from, to, text) => {
       const quoteOpen = lineBefore.lastIndexOf(style.sOpen) > lineBefore.lastIndexOf(style.sClose);
       insert = quoteOpen && style.sClose !== APOSTROPHE ? style.sClose : APOSTROPHE;
     } else {
-      const opening = isOpeningContext(prev, style);
+      const opening = isOpeningContext(significant, style);
       insert = text === '"' ? (opening ? style.dOpen : style.dClose) : opening ? style.sOpen : style.sClose;
     }
   } else if (text === " " && /(^|\s)--$/.test(before) && from === to) {

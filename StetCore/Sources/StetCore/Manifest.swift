@@ -10,6 +10,8 @@ public struct Manifest: Equatable {
     public var title: String
     public var authors: [String]
     public var language: String
+    /// The book's quotation marks, if chosen (nil: by language, see `quoteStyle`).
+    public var quotes: QuoteStyle?
     public var year: Int?
     public var cover: String?
     public var epubCSS: String?
@@ -30,6 +32,9 @@ public struct Manifest: Equatable {
         self.year = year
         self.structure = structure
     }
+
+    /// The quotation marks typing and exports use.
+    public var quoteStyle: QuoteStyle { quotes ?? .standard(forLanguage: language) }
 
     public struct UnknownKey: Equatable {
         public var key: String
@@ -236,6 +241,7 @@ extension Manifest {
             year: map["year"]?.int
         )
         manifest.format = map["format"]?.int ?? Manifest.currentFormat
+        manifest.quotes = map["quotes"]?.string.flatMap(QuoteStyle.init(rawValue:))
         manifest.cover = map["cover"]?.string
         manifest.epubCSS = map["epubCSS"]?.string
         manifest.factFields = map["factFields"]?.sequence?.compactMap(\.string)
@@ -243,7 +249,7 @@ extension Manifest {
         manifest.wordGoal = map["wordGoal"]?.int
         manifest.structure = try (map["structure"]?.sequence ?? []).map(Self.parseNode)
 
-        let known: Set<String> = ["format", "title", "authors", "author", "language", "year", "cover", "epubCSS", "factFields", "words", "wordGoal", "structure"]
+        let known: Set<String> = ["format", "title", "authors", "author", "language", "quotes", "year", "cover", "epubCSS", "factFields", "words", "wordGoal", "structure"]
         for (key, value) in map {
             if let name = key.string, !known.contains(name) {
                 manifest.unknown.append(UnknownKey(key: name, value: value))
@@ -282,6 +288,7 @@ extension Manifest {
             ("authors", Node(authors.map { Node($0) })),
             ("language", Node(language)),
         ]
+        if let quotes { pairs.append(("quotes", Node(quotes.rawValue))) }
         if let year { pairs.append(("year", Node(String(year)))) }
         if let cover { pairs.append(("cover", Node(cover))) }
         if let epubCSS { pairs.append(("epubCSS", Node(epubCSS))) }

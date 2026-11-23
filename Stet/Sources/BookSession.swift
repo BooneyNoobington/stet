@@ -38,6 +38,8 @@ final class BookSession: ObservableObject {
     @Published var sheet: Sheet?
     @Published var adoption: Adoption?
     @Published var isBusy = false
+    /// The question before turning the book's quotation marks into its style (BookSession+Quotes.swift).
+    @Published var quoteConversion: QuoteConversion?
 
     // Server (see BookSession+Server.swift)
     @Published var serverURL: String?
@@ -130,7 +132,6 @@ final class BookSession: ObservableObject {
         spelling = SpellingChecker(language: manifest.language)
         loadWiki()
         editor.settings.language = manifest.language
-        editor.settings.quotes = EditorSettings.quotes(forLanguage: manifest.language)
 
         observers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
@@ -183,6 +184,7 @@ final class BookSession: ObservableObject {
 
     func reloadSceneInfo() {
         manifest = book.manifest
+        if editor.settings.quotes != manifest.quoteStyle { editor.settings.quotes = manifest.quoteStyle }
         unplacedSceneIDs = book.unplacedSceneIDs()
         for id in manifest.sceneIDs + unplacedSceneIDs {
             guard let scene = try? book.readScene(id) else {

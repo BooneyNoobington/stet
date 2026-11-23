@@ -19,7 +19,7 @@ settings:
     SWIFT_VERSION: "5.0"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     # The one place for the version (scripts/release.sh can override both).
-    MARKETING_VERSION: "0.9.1"
+    MARKETING_VERSION: "0.9.2"
     CURRENT_PROJECT_VERSION: "1"
 
 targets:

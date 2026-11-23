@@ -117,7 +117,7 @@ enum HelpContent {
 
         **Kapitel und Szenen:** Links in der Seitenleiste. Neue Szene: ⌘N, neues Kapitel: ⌥⌘N. Über das Kontextmenü verschiebst, benennst und löschst du; Szenen lassen sich auch ziehen. Teile sind optional.
 
-        **Schreiben:** Stet schreibt Markdown, zeigt aber die Zeichen nur, wenn der Cursor sie berührt. **Fett** mit ⌘B, *kursiv* mit ⌘I. Anführungszeichen, Gedankenstriche und Auslassungspunkte setzt Stet passend zur Sprache des Buchs.
+        **Schreiben:** Stet schreibt Markdown, zeigt aber die Zeichen nur, wenn der Cursor sie berührt. **Fett** mit ⌘B, *kursiv* mit ⌘I. Anführungszeichen, Gedankenstriche und Auslassungspunkte setzt Stet beim Tippen. Welche Anführungszeichen, »Buch«, „Deutsch“ oder “English”, stellst du im Inspektor unter **Buch** ein. Buch ▸ **Anführungszeichen angleichen …** bringt auch die schon vorhandenen in diese Form, etwa aus importiertem oder eingefügtem Text.
 
         **Suchen:** ⌘F sucht im ganzen Buch, Groß- und Kleinschreibung egal. Zeilenschalter oder ⌘G springt zum nächsten Treffer, auch in die nächste Szene; Esc schließt die Suche. Mit dem Häkchen **Ersetzen** zählt Groß- und Kleinschreibung: „Ersetzen“ nimmt sich den markierten Treffer vor (⌘Z macht es rückgängig), „Alle ersetzen“ das ganze Buch – vorher sichert Stet einen Schnappschuss.
 

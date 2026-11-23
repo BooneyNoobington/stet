@@ -76,11 +76,11 @@ format: 1
 title: Der Leuchtturm
 authors: [Jane Doe]
 language: de
+quotes: guillemets        # guillemets (»« ›‹), de („“ ‚‘), en (“” ‘’); missing: by language (see §7)
 year: 2026                # defaults to the current year
 cover: assets/cover.jpg
 export:
   sceneBreak: "* * *"
-  quotes: de              # de („“), guillemets (»«), en (“”)
 structure:                # parts are optional; chapters always have titles
   - chapter: Ankunft
     id: c4e1d0
@@ -190,7 +190,9 @@ Features:
 - **Live preview**: Markdown symbols (`*`, `**`, `#`, `***`) are hidden unless the cursor touches them.
 - **Comments and TODOs** (§9) render as numbered markers with bubbles in a margin rail and can be shown or hidden.
 - **Wiki terms** (§10) are underlined via alias matching.
-- **Typography**: smart quotes per book language (`„“`, `»«`, `“”`), apostrophe `’`, ` -- ` → ` – `, `...` → `…`.
+- **Typography**: smart quotes in the book's style, apostrophe `’`, ` -- ` → ` – `, `...` → `…`. The style is the book's (`quotes:` in `manuscript.yaml`, chosen in the inspector under Buch): `»« ›‹` (the default for German books, as in most German novels), `„“ ‚‘` or `“” ‘’` (the default for English ones). Opening or closing depends on the character before, emphasis stars aside (`*"Ja"*`, `"*gut*"`).
+  - Typing only changes what's typed, so text that came in by import or paste keeps its straight quotes. **Buch ▸ Anführungszeichen angleichen …** turns every quotation mark in the book into the book's style (straight ones and those of another style), after a snapshot; in the open scene ⌘Z undoes it. It asks first, with the count; changing the style in the inspector asks the same ("Nur beim Tippen" keeps the text).
+  - The rules (`Typography.quotes` in StetCore, shared with exports): a single mark is an apostrophe inside a word (`geht's`), after a word when no single quote is open (`Andreas'`), and at the start of a word when nothing closes it later in the paragraph (`'n Abend`). Only quotation marks change, one character for another, so converting twice changes nothing.
 - **Focus mode**: dims everything except the current paragraph, with typewriter scrolling.
 - **Spelling** (Darstellung ▸ Rechtschreibfehler markieren, on by default): Stet checks the open scene itself with macOS's dictionaries (`NSSpellChecker`, the book's language) right after loading it and a moment after typing stops, and sends the ranges to the editor, which draws red wavy lines (they move with the text; a word being typed loses its line until the next check). WebKit's own checking is off: it only looks at the paragraph being typed in, so existing mistakes stayed invisible. No automatic correction: it would silently "fix" names, dialect and invented words. Comments (`{>>…<<}`) are not checked.
   - Right as written: the wiki's names (also their parts, with genitive s, and with -ens for names on s, ß, x, z) and the book's word list (`words:` in `manuscript.yaml`, merged like a list so two Macs' additions add up). Both are the "ignored words" of the book's own spell document, so the system dictionary stays clean.
@@ -314,7 +316,7 @@ Pipeline:
    - scene breaks per target: a Typst `#scenebreak()`, `<p class="scene-break">⁂</p>`, the Word style "Szenenwechsel", or `* * *`
    - comments removed, or turned into Pandoc comment spans for docx/odt
    - optional scene titles
-3. **Typography for the chosen quote style** („“ / »« / “” / unverändert): straight quotes → typographic ones by context, apostrophe ’, ` -- ` → ` – `, `...` → `…`. Same rules as typing in the editor; CriticMarkup and `***` lines are left alone. The writer's text isn't changed, only the export.
+3. **Typography for the chosen quote style** (the export sheet starts with the book's; »« / „“ / “” / unverändert): every quotation mark, straight or in another style, → that style by context, apostrophe ’, ` -- ` → ` – `, `...` → `…`. Same rules as typing in the editor and "Anführungszeichen angleichen"; CriticMarkup and `***` lines are left alone. The writer's text isn't changed, only the export.
 4. **Pandoc runs with `--from=markdown-smart`** and a Lua filter (`Resources/stet.lua`): links without a target become their text, and images whose file is missing become their caption. A real manuscript's early version had `[<!-- … -->]()`, which Typst refuses.
 5. **Every export is tagged** `export/<date>-<format>` (annotated, with the file name). The history shows these marks; the writer's own milestones take precedence.
 
