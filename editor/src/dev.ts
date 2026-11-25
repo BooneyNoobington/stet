@@ -1,16 +1,16 @@
-import type { StetEditorAPI } from "./api";
+import type { ZadurEditorAPI } from "./api";
 import type { EditorSettings } from "./settings";
 
 /**
  * Browser-only harness (when not hosted by the Swift app): a small toolbar to
  * load the sample, change settings and run the stress test.
  */
-export async function startDevHarness(api: StetEditorAPI) {
+export async function startDevHarness(api: ZadurEditorAPI) {
   const bar = document.getElementById("devbar");
   if (!bar) return;
   bar.hidden = false;
   bar.innerHTML = `
-    <strong>Stet · Editor-Prototyp</strong>
+    <strong>Zadur · Editor-Prototyp</strong>
     <label>Schrift
       <select data-setting="font">
         <option value="serif">Serif</option><option value="sans">Sans</option><option value="mono">Mono</option>
@@ -50,7 +50,7 @@ export async function startDevHarness(api: StetEditorAPI) {
       const result = api.loadStressTest(15_000);
       if (result) {
         out.title = JSON.stringify(result);
-        console.info("[stet] stress test", result);
+        console.info("[zadur] stress test", result);
       }
     }
   });
@@ -64,7 +64,7 @@ export async function startDevHarness(api: StetEditorAPI) {
   api.focus();
 }
 
-async function loadSample(api: StetEditorAPI) {
+async function loadSample(api: ZadurEditorAPI) {
   const response = await fetch("samples/szene.md");
   api.load(await response.text());
 }

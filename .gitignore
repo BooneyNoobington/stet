@@ -4,10 +4,10 @@ editor/dist/
 app/.build/
 app/.swiftpm/
 build/
-StetCore/.build/
-StetCore/.swiftpm/
+ZadurCore/.build/
+ZadurCore/.swiftpm/
 xcuserdata/
-Stet.xcodeproj/
-Stet/Info.plist
-Stet/QuickLook*/Info.plist
-Stet/QuickLook*/*.entitlements
+Zadur.xcodeproj/
+Zadur/Info.plist
+Zadur/QuickLook*/Info.plist
+Zadur/QuickLook*/*.entitlements

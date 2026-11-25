@@ -1,6 +1,6 @@
-# Releasing Stet
+# Releasing Zadur
 
-A release is a DMG (drag Stet into Programme/Applications) and a ZIP of the same app, built by
+A release is a DMG (drag Zadur into Programme/Applications) and a ZIP of the same app, built by
 `scripts/release.sh` into `build/release/`. Without an Apple Developer account the app is
 signed ad hoc: fine for testing, but macOS blocks it on other Macs until someone chooses
 System Settings ▸ Privacy & Security ▸ "Open Anyway". With the account it is signed with a
@@ -16,7 +16,7 @@ Builds the Release configuration for Apple silicon and Intel, with the hardened 
 (required for notarization), and runs nothing else. Check it with the self-tests:
 
 ```bash
-build/release/Stet.app/Contents/MacOS/Stet --selftest
+build/release/Zadur.app/Contents/MacOS/Zadur --selftest
 ```
 
 ## One-time setup with the Developer account
@@ -32,7 +32,7 @@ build/release/Stet.app/Contents/MacOS/Stet --selftest
    parentheses is the team ID.
 
 2. **App-specific password** for the notary service: appleid.apple.com ▸ Sign-In and
-   Security ▸ App-Specific Passwords ▸ "+", name it e.g. "Stet notarization".
+   Security ▸ App-Specific Passwords ▸ "+", name it e.g. "Zadur notarization".
 
 3. **Store it in the keychain** under a profile name (asks for the password; nothing ends up
    in the repo or the shell history):
@@ -44,14 +44,15 @@ build/release/Stet.app/Contents/MacOS/Stet --selftest
 ## Signed and notarized release
 
 ```bash
-STET_SIGN_IDENTITY="Developer ID Application: Markus Roth (TEAMID)" STET_NOTARY_PROFILE=stet-notary scripts/release.sh
+ZADUR_SIGN_IDENTITY="Developer ID Application: Markus Roth (TEAMID)" ZADUR_NOTARY_PROFILE=stet-notary scripts/release.sh
 ```
 
 The script builds the app, signs every part of it inside out (Sparkle's helper programs, the
 frameworks, the Quick Look extensions, then the app) with a secure timestamp, sends the app to
 Apple's notary service, staples the ticket to the app, builds the DMG, signs and notarizes that
 too, and finally asks Gatekeeper (`spctl`) whether both would open without a warning.
-Notarization usually takes a few minutes. A version other than the one in `project.yml`:
+Notarization usually takes a few minutes. (`STET_SIGN_IDENTITY` and `STET_NOTARY_PROFILE`, the
+names from when Zadur was called Stet, work as well.) A version other than the one in `project.yml`:
 `scripts/release.sh 0.9.1`.
 
 The first time, macOS asks whether `codesign` may use the Developer ID key: enter the login
@@ -59,7 +60,7 @@ password and choose "Always Allow" (otherwise it asks again for each part it sig
 
 ## Updates (Sparkle)
 
-Stet looks once a day for `appcast.xml` in the newest GitHub release
+Zadur looks once a day for `appcast.xml` in the newest GitHub release
 (`SUFeedURL` in `project.yml`) and offers the update; it installs only if the user agrees.
 Updates are signed with an EdDSA key: its public half is `SUPublicEDKey` in `project.yml`,
 the private half is in the login keychain of the Mac that builds releases (created with
@@ -81,16 +82,16 @@ Upload `appcast.xml` together with the DMG and the ZIP.
 
    ```bash
    git push origin main
-   git tag -a v0.9.0 -m "Stet 0.9.0"
+   git tag -a v0.9.0 -m "Zadur 0.9.0"
    git push origin v0.9.0
    ```
 
-2. GitHub ▸ Releases ▸ "Draft a new release", choose the tag, title "Stet 0.9.0", attach
-   `Stet-0.9.0.dmg`, `Stet-0.9.0.zip` and `appcast.xml`, and paste the checksums from
-   `Stet-0.9.0.sha256`. (The ZIP is what Sparkle downloads; the DMG is for new users.)
+2. GitHub ▸ Releases ▸ "Draft a new release", choose the tag, title "Zadur 0.9.0", attach
+   `Zadur-0.9.0.dmg`, `Zadur-0.9.0.zip` and `appcast.xml`, and paste the checksums from
+   `Zadur-0.9.0.sha256`. (The ZIP is what Sparkle downloads; the DMG is for new users.)
    Leave "Set as the latest release" on and "Set as a pre-release" off, then publish.
 3. Test it the way a club member will: download the DMG on another Mac (or another user
-   account), open it, drag Stet to Programme, start it. There must be no warning.
+   account), open it, drag Zadur to Programme, start it. There must be no warning.
 4. Check that the feed is reachable (it should end in `200`):
 
    ```bash
@@ -99,14 +100,14 @@ Upload `appcast.xml` together with the DMG and the ZIP.
 
 The release notes are what writers read: Sparkle shows the release's GitHub page in its update
 window. Write them in German and without technical terms (what's new, what got fixed), plus one
-line on installing ("DMG öffnen, Stet in den Ordner Programme ziehen"). The link to hand out is
+line on installing ("DMG öffnen, Zadur in den Ordner Programme ziehen"). The link to hand out is
 `https://github.com/BooneyNoobington/stet/releases/latest`; it always shows the newest version.
 
 ### How an update finds its way, and what breaks it
 
 Installed copies ask `…/releases/latest/download/appcast.xml` once a day; GitHub redirects that
 to the newest published release. The feed names the ZIP as
-`…/releases/download/v<version>/Stet-<version>.zip`; Sparkle downloads it and installs it only if
+`…/releases/download/v<version>/Zadur-<version>.zip`; Sparkle downloads it and installs it only if
 its EdDSA signature and length match the feed and the new app is signed by the same Developer ID.
 So:
 
@@ -118,28 +119,33 @@ So:
   without a feed leaves every installed copy without updates.
 - **Never replace the ZIP alone.** A new ZIP needs a new feed: run `scripts/appcast.sh` and
   replace `appcast.xml` too, or Sparkle rejects the download.
+- **Never change the bundle identifier** (`io.github.booneynoobington.stet`, from when Zadur was
+  called Stet): Sparkle recognizes the renamed app only by it, and no installed copy would update
+  any more. Updated copies keep their file name (`Stet.app`) until someone renames them in Finder.
+- **If the repository is renamed on GitHub**, the old address forwards to the new one, so installed
+  copies keep finding the feed. Never create another repository under the old name.
 - **Never lose the update key or change `SUPublicEDKey`.** Installed copies only accept updates
   signed with the key they know.
 
 ## Later: Homebrew
 
-A tap is a separate repository named `homebrew-stet` with one file, `Casks/stet.rb`:
+A tap is a separate repository named `homebrew-zadur` with one file, `Casks/zadur.rb`:
 
 ```ruby
-cask "stet" do
+cask "zadur" do
   version "0.9.0"
-  sha256 "<sha256 of Stet-0.9.0.zip>"
+  sha256 "<sha256 of Zadur-0.9.0.zip>"
 
-  url "https://github.com/BooneyNoobington/stet/releases/download/v#{version}/Stet-#{version}.zip"
-  name "Stet"
+  url "https://github.com/BooneyNoobington/stet/releases/download/v#{version}/Zadur-#{version}.zip"
+  name "Zadur"
   desc "Writing app with a lossless, branchable history"
   homepage "https://github.com/BooneyNoobington/stet"
 
   depends_on macos: ">= :sonoma"
 
-  app "Stet.app"
+  app "Zadur.app"
 end
 ```
 
-Then `brew install --cask BooneyNoobington/stet/stet`. Homebrew expects notarized apps, so
+Then `brew install --cask BooneyNoobington/zadur/zadur`. Homebrew expects notarized apps, so
 this comes after the first notarized release.

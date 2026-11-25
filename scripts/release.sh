@@ -1,13 +1,13 @@
 #!/bin/bash
-# Builds a release of Stet: Release configuration, Apple silicon + Intel, hardened runtime,
-# packed as Stet-<version>.dmg (drag to Applications) and Stet-<version>.zip in build/release/.
+# Builds a release of Zadur: Release configuration, Apple silicon + Intel, hardened runtime,
+# packed as Zadur-<version>.dmg (drag to Applications) and Zadur-<version>.zip in build/release/.
 #
 #   scripts/release.sh                 version from project.yml, signed ad hoc (for testing)
 #   scripts/release.sh 0.9.1           another version
 #
 # Signed and notarized (needs an Apple Developer account, see docs/RELEASING.md):
-#   STET_SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" \
-#   STET_NOTARY_PROFILE=stet-notary scripts/release.sh
+#   ZADUR_SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" \
+#   ZADUR_NOTARY_PROFILE=stet-notary scripts/release.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,21 +15,22 @@ cd "$ROOT"
 
 VERSION="${1:-$(sed -n 's/^ *MARKETING_VERSION: *"\(.*\)"/\1/p' project.yml | head -1)}"
 BUILD="$(git rev-list --count HEAD)"
-IDENTITY="${STET_SIGN_IDENTITY:--}"
-PROFILE="${STET_NOTARY_PROFILE:-}"
+# (The names from when Zadur was called Stet work as well.)
+IDENTITY="${ZADUR_SIGN_IDENTITY:-${STET_SIGN_IDENTITY:--}}"
+PROFILE="${ZADUR_NOTARY_PROFILE:-${STET_NOTARY_PROFILE:-}}"
 OUT="build/release"
-APP="$OUT/Stet.app"
-NAME="Stet-$VERSION"
+APP="$OUT/Zadur.app"
+NAME="Zadur-$VERSION"
 
 if [[ -n "$PROFILE" && "$IDENTITY" == "-" ]]; then
-  echo "Notarizing needs a Developer ID signature: set STET_SIGN_IDENTITY." >&2
+  echo "Notarizing needs a Developer ID signature: set ZADUR_SIGN_IDENTITY." >&2
   exit 1
 fi
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "⚠︎ The working tree has uncommitted changes; the release won't match a commit." >&2
 fi
 
-echo "▸ Stet $VERSION (build $BUILD), signed with: $([[ "$IDENTITY" == "-" ]] && echo "ad hoc" || echo "$IDENTITY")"
+echo "▸ Zadur $VERSION (build $BUILD), signed with: $([[ "$IDENTITY" == "-" ]] && echo "ad hoc" || echo "$IDENTITY")"
 echo "▸ Generating Xcode project"
 xcodegen generate --quiet
 
@@ -39,13 +40,13 @@ rm -rf "$OUT" build/ReleaseData
 # to xcodebuild clashes with the Swift packages' automatically signed resource bundles, and it
 # wouldn't reach Sparkle's helper programs, which notarization checks too.) No debugger
 # entitlement (get-task-allow) either: notarization refuses it.
-xcodebuild -project Stet.xcodeproj -scheme Stet -configuration Release \
+xcodebuild -project Zadur.xcodeproj -scheme Zadur -configuration Release \
   -derivedDataPath build/ReleaseData -quiet build \
   ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
   ENABLE_HARDENED_RUNTIME=YES CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
 mkdir -p "$OUT"
-ditto build/ReleaseData/Build/Products/Release/Stet.app "$APP"
+ditto build/ReleaseData/Build/Products/Release/Zadur.app "$APP"
 
 echo "▸ Signing"
 # Inside out: Sparkle's helper programs, the frameworks, the Quick Look extensions (each keeps
@@ -61,14 +62,14 @@ for code in "$SPARKLE"/XPCServices/*.xpc "$SPARKLE/Autoupdate" "$SPARKLE/Updater
 done
 if [[ "$IDENTITY" == "-" ]]; then
   # Ad hoc there's no team ID, so the hardened runtime would refuse Sparkle.framework.
-  sign --entitlements Stet/AdHocRelease.entitlements "$APP"
+  sign --entitlements Zadur/AdHocRelease.entitlements "$APP"
 else
   sign "$APP"
 fi
 
 echo "▸ Checking the signature"
 codesign --verify --deep --strict "$APP"
-lipo -archs "$APP/Contents/MacOS/Stet"
+lipo -archs "$APP/Contents/MacOS/Zadur"
 
 notarize() {
   echo "▸ Notarizing $(basename "$1") (Apple checks it; takes a few minutes)"
@@ -85,9 +86,9 @@ fi
 echo "▸ Packing"
 ditto -c -k --keepParent "$APP" "$OUT/$NAME.zip"
 STAGE="$(mktemp -d)"
-ditto "$APP" "$STAGE/Stet.app"
+ditto "$APP" "$STAGE/Zadur.app"
 ln -s /Applications "$STAGE/Programme"
-hdiutil create -quiet -volname "Stet $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$OUT/$NAME.dmg"
+hdiutil create -quiet -volname "Zadur $VERSION" -srcfolder "$STAGE" -ov -format UDZO "$OUT/$NAME.dmg"
 rm -rf "$STAGE"
 
 if [[ "$IDENTITY" != "-" ]]; then

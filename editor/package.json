@@ -1,9 +1,9 @@
 {
-  "name": "stet-editor",
+  "name": "zadur-editor",
   "private": true,
   "license": "GPL-3.0-or-later",
   "version": "0.1.0",
-  "description": "Stet writing pane: CodeMirror 6 editor shared by the macOS app and the future web app",
+  "description": "Zadur writing pane: CodeMirror 6 editor shared by the macOS app and the future web app",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

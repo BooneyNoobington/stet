@@ -278,7 +278,7 @@ export function runFormat(view: EditorView, kind: FormatKind): boolean {
   return done;
 }
 
-export const stetKeymap: KeyBinding[] = [
+export const zadurKeymap: KeyBinding[] = [
   { key: "Mod-b", run: formatCommands.bold },
   { key: "Mod-i", run: formatCommands.italic },
   { key: "Mod-Alt-m", run: formatCommands.comment },

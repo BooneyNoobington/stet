@@ -1,0 +1,43 @@
+/* Zadur – Grundlayout fürs ePUB. Ein eigenes Stylesheet des Buchs wird davor eingebunden. */
+body {
+  font-family: serif;
+  line-height: 1.45;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+p {
+  margin: 0;
+  text-indent: 1.2em;
+  text-align: justify;
+}
+h1 + p, h2 + p, h3 + p, .scene-break + p, blockquote + p, blockquote p:first-child {
+  text-indent: 0;
+}
+blockquote {
+  margin: 0.9em 1.4em;
+  font-size: 0.94em;
+}
+h1, h2 {
+  text-align: center;
+  font-weight: normal;
+  font-style: italic;
+  margin: 3em 0 2em;
+  page-break-before: always;
+}
+h3.scene-title {
+  text-align: center;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 1.5em 0 1em;
+}
+p.scene-break {
+  text-align: center;
+  text-indent: 0;
+  margin: 1.2em 0;
+}
+section.colophon p {
+  text-indent: 0;
+  font-size: 0.8em;
+  text-align: left;
+}

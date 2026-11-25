@@ -12,8 +12,8 @@ export interface Misspelling {
 
 export const setMisspellings = StateEffect.define<Misspelling[]>();
 
-const mark = Decoration.mark({ class: "stet-misspelled" });
-const hintMark = Decoration.mark({ class: "stet-hint" });
+const mark = Decoration.mark({ class: "zadur-misspelled" });
+const hintMark = Decoration.mark({ class: "zadur-hint" });
 
 /**
  * Red wavy lines from the host's spelling check (macOS's dictionaries, plus the book's words and

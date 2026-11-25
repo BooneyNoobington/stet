@@ -28,8 +28,8 @@ jobs:
           npx tsc --noEmit
           npm run build
 
-      - name: StetCore tests
-        run: swift test --package-path StetCore
+      - name: ZadurCore tests
+        run: swift test --package-path ZadurCore
 
       - name: Build the app
         run: ./scripts/build.sh
@@ -38,4 +38,4 @@ jobs:
       # while the core tests pass, look here first.
       - name: Editor self-test
         timeout-minutes: 5
-        run: build/Stet.app/Contents/MacOS/Stet --selftest
+        run: build/Zadur.app/Contents/MacOS/Zadur --selftest

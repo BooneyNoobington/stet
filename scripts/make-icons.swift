@@ -1,4 +1,4 @@
-// Renders Stet.icns (app) and StetBook.icns (.stet books) from StetArtwork.
+// Renders ZadurBook.icns (books in Finder) from ZadurArtwork. The app icon comes from Zadur-Icon-Kit.
 // Run via scripts/make-icons.sh.
 import AppKit
 
@@ -28,8 +28,7 @@ func makeIconset(named name: String, at folder: URL, draw: (CGRect) -> Void) thr
 }
 
 let work = URL(fileURLWithPath: CommandLine.arguments[1])
-_ = try makeIconset(named: "Stet", at: work, draw: StetArtwork.drawAppIcon)
-_ = try makeIconset(named: "StetBook", at: work, draw: StetArtwork.drawDocumentIcon)
+_ = try makeIconset(named: "ZadurBook", at: work, draw: ZadurArtwork.drawDocumentIcon)
 
 // A sample title page, for checking the thumbnail fallback.
 let sample = NSBitmapImageRep(
@@ -38,6 +37,6 @@ let sample = NSBitmapImageRep(
 )!
 NSGraphicsContext.saveGraphicsState()
 NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: sample)
-StetArtwork.drawTitlePage(title: "Der Leuchtturm am Ende der Welt", author: "Erika Muster", in: CGRect(x: 0, y: 0, width: 600, height: 848))
+ZadurArtwork.drawTitlePage(title: "Der Leuchtturm am Ende der Welt", author: "Erika Muster", in: CGRect(x: 0, y: 0, width: 600, height: 848))
 NSGraphicsContext.restoreGraphicsState()
 try sample.representation(using: .png, properties: [:])!.write(to: work.appendingPathComponent("title-page-sample.png"))

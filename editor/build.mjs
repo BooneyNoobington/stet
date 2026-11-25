@@ -27,7 +27,7 @@ if (serve) {
   const ctx = await esbuild.context(options);
   await ctx.watch();
   const { port } = await ctx.serve({ servedir: outdir, port: Number(process.env.PORT ?? 5173) });
-  console.log(`Stet editor dev server: http://localhost:${port}/`);
+  console.log(`Zadur editor dev server: http://localhost:${port}/`);
 } else {
   await esbuild.build(options);
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3 -I
-"""Builds StetCore/Sources/StetCore/Resources/reference.docx from Pandoc's default reference.
+"""Builds ZadurCore/Sources/ZadurCore/Resources/reference.docx from Pandoc's default reference.
 
 Adds a centred "Szenenwechsel" paragraph style and sets a readable body: Times New Roman 12 pt,
 1.5 line spacing (room for handwritten notes), first-line indent instead of paragraph gaps.
@@ -7,7 +7,7 @@ Adds a centred "Szenenwechsel" paragraph style and sets a readable body: Times N
 import re, subprocess, sys, zipfile, io, pathlib
 
 root = pathlib.Path(__file__).resolve().parent.parent
-target = root / "StetCore/Sources/StetCore/Resources/reference.docx"
+target = root / "ZadurCore/Sources/ZadurCore/Resources/reference.docx"
 default = subprocess.run(["pandoc", "--print-default-data-file", "reference.docx"],
                          capture_output=True, check=True).stdout
 

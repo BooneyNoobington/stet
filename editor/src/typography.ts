@@ -9,7 +9,7 @@ import { type QuoteStyle, settingsField } from "./settings";
  *   " -- " → " – "        (only between spaces, so CriticMarkup `{--` stays intact)
  *   "..."  → "…"
  * Whether a quote opens or closes depends on what comes before it, emphasis stars aside
- * (*"Ja"*, "*gut*"): the same rules as `Typography` in StetCore, which exports and
+ * (*"Ja"*, "*gut*"): the same rules as `Typography` in ZadurCore, which exports and
  * "Anführungszeichen angleichen" use. Each substitution is its own undo step; ⌘Z right after
  * restores the plain character.
  */

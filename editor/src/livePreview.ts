@@ -16,7 +16,7 @@ import {
  */
 
 const hidden = Decoration.replace({});
-const quoteLine = Decoration.line({ class: "stet-quote" });
+const quoteLine = Decoration.line({ class: "zadur-quote" });
 
 class SceneBreakWidget extends WidgetType {
   eq() {
@@ -24,7 +24,7 @@ class SceneBreakWidget extends WidgetType {
   }
   toDOM() {
     const el = document.createElement("span");
-    el.className = "stet-scene-break";
+    el.className = "zadur-scene-break";
     el.textContent = "⁂";
     el.setAttribute("aria-label", "Szenenwechsel");
     return el;

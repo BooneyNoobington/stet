@@ -1,6 +1,6 @@
 # Editor spike: CodeMirror 6 in a native Mac shell
 
-**Question:** can a CodeMirror 6 writing pane inside a SwiftUI app feel native enough for Stet, while keeping the file exactly as typed?
+**Question:** can a CodeMirror 6 writing pane inside a SwiftUI app feel native enough for Zadur, while keeping the file exactly as typed?
 
 **Status:** built, and the automated checks pass. The hands-on checklist below is still open. It decides go / no-go. The spike has since grown into the real app (Phase 1); the editor is the same.
 
@@ -11,7 +11,7 @@
 ```
 
 ```bash
-open build/Stet.app
+open build/Zadur.app
 ```
 
 Browser version (same editor, with a small dev toolbar), served on http://localhost:5173:
@@ -23,10 +23,10 @@ npm --prefix editor run dev
 Automated bridge test against real WebKit (prints a JSON report, exits non-zero on failure):
 
 ```bash
-build/Stet.app/Contents/MacOS/Stet --selftest
+build/Zadur.app/Contents/MacOS/Zadur --selftest
 ```
 
-To debug the editor inside the app, use Safari ▸ Develop ▸ *your Mac* ▸ Stet. The web view is inspectable.
+To debug the editor inside the app, use Safari ▸ Develop ▸ *your Mac* ▸ Zadur. The web view is inspectable.
 
 ## What's in it
 
@@ -69,7 +69,7 @@ These can't be tested from outside. They are what "feels native" means. Note any
 
 **macOS text services**
 - [ ] Spelling: red underlines for German words; right-click shows suggestions; Edit ▸ Spelling and Grammar works
-- [ ] Do macOS's own substitutions (System Settings ▸ Keyboard ▸ Text Input: smart quotes, auto-capitalization, text replacements like "omw") clash with Stet's smart quotes?
+- [ ] Do macOS's own substitutions (System Settings ▸ Keyboard ▸ Text Input: smart quotes, auto-capitalization, text replacements like "omw") clash with Zadur's smart quotes?
 - [ ] Look Up (three-finger tap or ⌃⌘D on a word)
 - [ ] Writing Tools / Apple Intelligence on a selection, if enabled
 - [ ] Services menu on a selection
@@ -92,12 +92,12 @@ These can't be tested from outside. They are what "feels native" means. Note any
 
 ## Findings and decisions so far
 
-- **Line endings:** CodeMirror normalizes `\r\n` to `\n`. Decision: Stet's scene files are UTF-8 with LF by definition. Imported files are converted once, visibly, on import.
+- **Line endings:** CodeMirror normalizes `\r\n` to `\n`. Decision: Zadur's scene files are UTF-8 with LF by definition. Imported files are converted once, visibly, on import.
 - **Paste:** CodeMirror pastes plain text, so italics from Word are lost. Converting HTML to Markdown on paste is a later feature.
 - **Smart quotes:** `'` after a letter becomes an apostrophe (’) unless a single quote (‚) is open in the same paragraph. A leading elision (`’s ist`) comes out as ‚. That ambiguity is inherent; ⌘Z fixes it in one keystroke.
 - **Bundle size:** 506 KB minified, mostly because `@codemirror/lang-markdown` pulls in the HTML/CSS/JS grammars. Can be trimmed later; irrelevant for a local app.
 - **Comment rail:** rebuilt on every edit. That's fast enough at the measured sizes; it can be made incremental later.
-- **Spike app:** a SwiftPM executable wrapped by a script. The real app moves to an Xcode project for the `.stet` document type, signing and Sparkle.
+- **Spike app:** a SwiftPM executable wrapped by a script. The real app moves to an Xcode project for the `.crea` document type, signing and Sparkle.
 
 ## Go / no-go
 

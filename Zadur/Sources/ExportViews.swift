@@ -1,0 +1,234 @@
+import AppKit
+import ZadurCore
+import SwiftUI
+import UniformTypeIdentifiers
+
+extension BookSession {
+    /// Exports the open version; pending changes are saved as a version first. Returns the result,
+    /// or nil after showing an error.
+    func export(_ options: ExportOptions, to url: URL) async -> ExportResult? {
+        await persist()
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let result = try await Exporter.export(book, options: options, to: url)
+            hasChangesSinceVersion = false
+            lastVersion = try? await book.git.log(limit: 1).first
+            await refreshVersions()
+            await loadHistory()
+            scheduleSync()
+            Task { await exported(result.file) }
+            return result
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The book's quotation marks (chosen in the inspector).
+    var defaultExportQuotes: ExportQuotes { ExportQuotes(manifest.quoteStyle) }
+}
+
+struct ExportSheet: View {
+    @ObservedObject var session: BookSession
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("ExportFormat") private var formatRaw = ExportFormat.pdfManuscript.rawValue
+    /// Starts with the book's quotation marks each time.
+    @State private var quotesRaw = ""
+    @AppStorage("ExportWordComments") private var wordComments = false
+    @AppStorage("ExportSceneTitles") private var sceneTitles = false
+    @State private var result: ExportResult?
+    @ObservedObject private var installer = ToolInstaller.shared
+    @State private var fileStamps: [StampRecord] = []
+
+    private var format: ExportFormat { ExportFormat(rawValue: formatRaw) ?? .pdfManuscript }
+    private var quotes: ExportQuotes { ExportQuotes(rawValue: quotesRaw) ?? session.defaultExportQuotes }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let result {
+                done(result)
+            } else {
+                form
+            }
+        }
+        .padding(24)
+        .frame(width: 540)
+    }
+
+    private var form: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Exportieren").font(.title2)
+
+            Picker("Format", selection: $formatRaw) {
+                ForEach(ExportFormat.allCases) { format in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(format.label)
+                        Text(format.detail).font(.caption).foregroundStyle(.secondary)
+                    }
+                    .tag(format.rawValue)
+                }
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+
+            Divider()
+
+            Picker("Anführungszeichen", selection: Binding(get: { quotes.rawValue }, set: { quotesRaw = $0 })) {
+                ForEach(ExportQuotes.allCases) { Text($0.label).tag($0.rawValue) }
+            }
+            .help("Alle Anführungszeichen werden in diese Form gebracht, gerade (\") wie solche in einem anderen Stil; dazu Apostroph, Gedankenstrich und Auslassungspunkte. Voreingestellt: die des Buchs (im Inspektor).")
+            Toggle("Szenentitel als Zwischenüberschriften", isOn: $sceneTitles)
+            if format.supportsWordComments {
+                Toggle("Kommentare und TODOs als Kommentare mitnehmen", isOn: $wordComments)
+                    .help("Sonst werden Kommentare beim Export entfernt.")
+            } else {
+                Text("Kommentare und TODOs werden beim Export entfernt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            let missing = Exporter.missingTools(for: format)
+            if !missing.isEmpty {
+                ToolsNeeded(tools: missing, installer: installer)
+            }
+
+            Text("Exportiert wird die \(session.branchName == "Hauptfassung" ? "Hauptfassung" : "Fassung „\(session.branchName)“"). Ungesicherte Änderungen werden vorher als Version gesichert, und der Export bekommt eine Markierung im Verlauf – so weißt du später genau, welcher Text in dieser Datei steht.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Abbrechen", role: .cancel) { dismiss() }
+                Button("Exportieren …") { chooseDestination() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!missing.isEmpty || session.isBusy)
+            }
+        }
+    }
+
+    private func done(_ result: ExportResult) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label("Exportiert", systemImage: "checkmark.circle.fill").font(.title2).foregroundStyle(.green)
+            Text(result.file.lastPathComponent).font(.headline)
+            Text(result.stamp.line + ". Im Verlauf markiert.")
+                .foregroundStyle(.secondary)
+            if session.proofs.timestampsOn {
+                HStack {
+                    Label(stampLine, systemImage: "clock.badge.checkmark")
+                        .foregroundStyle(.secondary)
+                        .help(fileStamps.isEmpty ? "" : session.stampText(fileStamps))
+                    Spacer()
+                    Button("Nachweis speichern …") { session.saveProof(forFile: result.file) }
+                        .help("Ein Ordner mit der Datei, ihren Zeitstempeln und einer Anleitung, wie man sie ohne Zadur prüft.")
+                }
+                .task(id: session.stamps.values.map(\.count).reduce(0, +)) {
+                    fileStamps = (try? await session.book.stamps(forFile: result.file)) ?? []
+                }
+            }
+            HStack {
+                Button("Im Finder zeigen") { NSWorkspace.shared.activateFileViewerSelecting([result.file]) }
+                Spacer()
+                Button("Öffnen") {
+                    NSWorkspace.shared.open(result.file)
+                    dismiss()
+                }
+                Button("Fertig") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+    }
+
+    private var stampLine: String {
+        if !fileStamps.isEmpty { return "Zeitstempel: " + fileStamps.map(\.authority).joined(separator: ", ") }
+        return session.isStamping ? "Zeitstempel wird geholt …" : "Zeitstempel folgt, sobald ein Dienst erreichbar ist."
+    }
+
+    private func chooseDestination() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: format.fileExtension) ?? .data]
+        let suffix = format == .pdfManuscript ? " (Manuskript)" : ""
+        panel.nameFieldStringValue = session.manifest.title + suffix + "." + format.fileExtension
+        panel.prompt = "Exportieren"
+        guard let window = NSApp.keyWindow else { return }
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else { return }
+            var options = ExportOptions(format: format, quotes: quotes)
+            options.commentsAsAnnotations = wordComments && format.supportsWordComments
+            options.sceneTitles = sceneTitles
+            Task { result = await session.export(options, to: url) }
+        }
+    }
+}
+
+// MARK: - Pandoc and Typst on demand
+
+/// Downloads Zadur's export tools (see ExportTools) and reports progress to the sheet.
+@MainActor
+final class ToolInstaller: ObservableObject {
+    static let shared = ToolInstaller()
+
+    enum State: Equatable {
+        case idle
+        case loading(Double)
+        case failed(String)
+    }
+
+    @Published private(set) var state: State = .idle
+
+    func install(_ tools: [String]) async {
+        state = .loading(0)
+        do {
+            try await ExportTools.install(tools) { fraction in
+                Task { @MainActor in
+                    if case .loading = self.state { self.state = .loading(fraction) }
+                }
+            }
+            state = .idle
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+}
+
+private struct ToolsNeeded: View {
+    let tools: [String]
+    @ObservedObject var installer: ToolInstaller
+
+    private var names: String {
+        tools.map { $0 == "pandoc" ? "Pandoc" : $0 == "typst" ? "Typst" : $0 }.joined(separator: " und ")
+    }
+
+    private var megabytes: String {
+        "\(Int((Double(ExportTools.downloadSize(for: tools)) / 1_000_000).rounded()))\u{00A0}MB"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Für dieses Format braucht Zadur \(tools.count == 1 ? "das Programm" : "die Programme") \(names).", systemImage: "arrow.down.circle")
+            Text("Zadur lädt \(tools.count == 1 ? "es" : "sie") einmalig von den offiziellen Seiten der Projekte (für diesen Mac \(megabytes)) und prüft, dass \(tools.count == 1 ? "es" : "sie") unverändert \(tools.count == 1 ? "ist" : "sind").")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            switch installer.state {
+            case .loading(let fraction):
+                ProgressView(value: fraction) { Text("Wird geladen …").font(.caption) }
+            case .failed(let message):
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Erneut versuchen") { Task { await installer.install(tools) } }
+            case .idle:
+                Button("\(names) laden") { Task { await installer.install(tools) } }
+                    .controlSize(.large)
+            }
+            Text("Wer Homebrew nutzt, kann stattdessen im Terminal „brew install \(tools.joined(separator: " "))“ eingeben.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+    }
+}

@@ -10,8 +10,8 @@ export interface SearchMatch {
 /** The matches to highlight, and which of them is the current one (-1: none). */
 export const setSearchMatches = StateEffect.define<{ matches: SearchMatch[]; current: number }>();
 
-const matchMark = Decoration.mark({ class: "stet-search-match" });
-const currentMark = Decoration.mark({ class: "stet-search-match stet-search-current" });
+const matchMark = Decoration.mark({ class: "zadur-search-match" });
+const currentMark = Decoration.mark({ class: "zadur-search-match zadur-search-current" });
 
 /**
  * Highlights from the find bar (the host searches the whole book and sends this scene's

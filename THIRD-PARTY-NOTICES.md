@@ -1,12 +1,12 @@
 # Third-party notices
 
-Stet is licensed under the GNU General Public License v3.0 or later (see LICENSE).
-Stet.app contains the following components, each under its own license.
-Pandoc (GPL-2.0-or-later), Typst (Apache-2.0) and git are separate programs that Stet runs;
-on request Stet downloads Pandoc's and Typst's official releases from their projects.
-They are not part of Stet.
+Zadur is licensed under the GNU General Public License v3.0 or later (see LICENSE).
+Zadur.app contains the following components, each under its own license.
+Pandoc (GPL-2.0-or-later), Typst (Apache-2.0) and git are separate programs that Zadur runs;
+on request Zadur downloads Pandoc's and Typst's official releases from their projects.
+They are not part of Zadur.
 
-## Editor (bundled into Stet.app/Contents/Resources/Editor)
+## Editor (bundled into Zadur.app/Contents/Resources/Editor)
 
 ### @codemirror/autocomplete 6.20.4 – MIT
 
@@ -574,7 +574,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-## Sparkle (Stet.app/Contents/Frameworks) – updates
+## Sparkle (Zadur.app/Contents/Frameworks) – updates
 
 2.10.1 – MIT, https://sparkle-project.org
 
@@ -715,7 +715,7 @@ IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 ```
 
-## Yams (compiled into Stet)
+## Yams (compiled into Zadur)
 
 6.2.2 – MIT, https://github.com/jpsim/Yams
 

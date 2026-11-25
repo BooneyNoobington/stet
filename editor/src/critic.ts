@@ -105,7 +105,7 @@ class MarkerWidget extends WidgetType {
   }
   toDOM() {
     const el = document.createElement("sup");
-    el.className = "stet-comment-marker" + (this.todo ? " is-todo" : "");
+    el.className = "zadur-comment-marker" + (this.todo ? " is-todo" : "");
     el.textContent = String(this.index);
     el.setAttribute("aria-label", this.todo ? `TODO ${this.index}` : `Kommentar ${this.index}`);
     return el;
@@ -117,9 +117,9 @@ class MarkerWidget extends WidgetType {
 }
 
 const hidden = Decoration.replace({});
-const raw = Decoration.mark({ class: "stet-critic-raw" });
-const highlightMark = Decoration.mark({ class: "stet-critic-hl" });
-const highlightTodoMark = Decoration.mark({ class: "stet-critic-hl is-todo" });
+const raw = Decoration.mark({ class: "zadur-critic-raw" });
+const highlightMark = Decoration.mark({ class: "zadur-critic-hl" });
+const highlightTodoMark = Decoration.mark({ class: "zadur-critic-hl is-todo" });
 
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view;
@@ -195,7 +195,7 @@ class CommentRail {
 
   constructor(readonly view: EditorView) {
     this.dom = document.createElement("div");
-    this.dom.className = "stet-comment-rail";
+    this.dom.className = "zadur-comment-rail";
     this.dom.setAttribute("role", "complementary");
     this.dom.setAttribute("aria-label", "Kommentare");
     this.dom.addEventListener("mousedown", this.onMouseDown);
@@ -256,20 +256,20 @@ class CommentRail {
       const bubble = document.createElement("div");
       const active = head >= item.from && head <= item.to;
       bubble.className =
-        "stet-bubble" + (item.kind === "todo" ? " is-todo" : "") + (active ? " is-active" : "");
+        "zadur-bubble" + (item.kind === "todo" ? " is-todo" : "") + (active ? " is-active" : "");
       bubble.dataset.target = String(item.comment!.from);
 
       const meta = document.createElement("div");
-      meta.className = "stet-bubble-meta";
+      meta.className = "zadur-bubble-meta";
       const number = document.createElement("span");
       number.textContent = String(item.index);
       const label = document.createElement("span");
-      label.className = "stet-bubble-kind";
+      label.className = "zadur-bubble-kind";
       label.textContent = item.kind === "todo" ? "TODO" : (item.author ?? "Notiz");
       meta.append(number, label);
 
       const body = document.createElement("div");
-      body.className = "stet-bubble-body";
+      body.className = "zadur-bubble-body";
       body.textContent = item.body || "…";
 
       bubble.append(meta, body);
@@ -282,7 +282,7 @@ class CommentRail {
   }
 
   onMouseDown = (event: MouseEvent) => {
-    const bubble = (event.target as HTMLElement).closest<HTMLElement>(".stet-bubble");
+    const bubble = (event.target as HTMLElement).closest<HTMLElement>(".zadur-bubble");
     if (!bubble) return;
     event.preventDefault();
     const target = Number(bubble.dataset.target);

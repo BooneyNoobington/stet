@@ -5,7 +5,7 @@ import type { EditorSettings } from "./settings";
 import type { TextStats } from "./stats";
 import type { WikiTerm } from "./wiki";
 
-/** Messages the editor posts to the host (the Swift app) via `webkit.messageHandlers.stet`. */
+/** Messages the editor posts to the host (the Swift app) via `webkit.messageHandlers.zadur`. */
 export type HostMessage =
   | { type: "ready" }
   | { type: "changed" }
@@ -30,8 +30,8 @@ export interface StressTestResult {
   msPerKeystroke: number;
 }
 
-/** Exposed as `window.stet`; the host calls these with `callAsyncJavaScript`. */
-export interface StetEditorAPI {
+/** Exposed as `window.zadur`; the host calls these with `callAsyncJavaScript`. */
+export interface ZadurEditorAPI {
   load(text: string): { length: number };
   getText(): string;
   /** Replaces the whole text as one undoable edit (used to restore an older version). */

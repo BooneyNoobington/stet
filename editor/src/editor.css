@@ -1,50 +1,50 @@
 :root {
-  --stet-font: "Iowan Old Style", "New York", ui-serif, Georgia, serif;
-  --stet-mono: ui-monospace, "SF Mono", Menlo, monospace;
-  --stet-ui: -apple-system, system-ui, "Helvetica Neue", sans-serif;
-  --stet-size: 19px;
-  --stet-line-height: 1.65;
-  --stet-column: 36em;
-  --stet-rail: 240px;
+  --zadur-font: "Iowan Old Style", "New York", ui-serif, Georgia, serif;
+  --zadur-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --zadur-ui: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+  --zadur-size: 19px;
+  --zadur-line-height: 1.65;
+  --zadur-column: 36em;
+  --zadur-rail: 240px;
 
-  --stet-bg: #fbfaf7;
-  --stet-text: #26231f;
-  --stet-muted: #8a847a;
-  --stet-accent: #9a5b2a;
-  --stet-selection: rgba(154, 91, 42, 0.2);
-  --stet-hl: rgba(232, 182, 60, 0.3);
-  --stet-hl-todo: rgba(214, 98, 72, 0.18);
-  --stet-raw-bg: rgba(138, 132, 122, 0.12);
-  --stet-quote-rule: rgba(138, 132, 122, 0.35);
-  --stet-bubble-bg: #ffffff;
-  --stet-bubble-border: #e7e2d8;
-  --stet-todo: #b6492f;
-  --stet-misspelled: rgba(214, 48, 39, 0.75);
-  --stet-hint: rgba(40, 110, 200, 0.7);
-  --stet-find: rgba(255, 210, 0, 0.3);
-  --stet-find-current: rgba(255, 198, 0, 0.95);
+  --zadur-bg: #fbfaf7;
+  --zadur-text: #26231f;
+  --zadur-muted: #8a847a;
+  --zadur-accent: #9a5b2a;
+  --zadur-selection: rgba(154, 91, 42, 0.2);
+  --zadur-hl: rgba(232, 182, 60, 0.3);
+  --zadur-hl-todo: rgba(214, 98, 72, 0.18);
+  --zadur-raw-bg: rgba(138, 132, 122, 0.12);
+  --zadur-quote-rule: rgba(138, 132, 122, 0.35);
+  --zadur-bubble-bg: #ffffff;
+  --zadur-bubble-border: #e7e2d8;
+  --zadur-todo: #b6492f;
+  --zadur-misspelled: rgba(214, 48, 39, 0.75);
+  --zadur-hint: rgba(40, 110, 200, 0.7);
+  --zadur-find: rgba(255, 210, 0, 0.3);
+  --zadur-find-current: rgba(255, 198, 0, 0.95);
 
   color-scheme: light dark;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --stet-bg: #1c1b19;
-    --stet-text: #e6e1d8;
-    --stet-muted: #8f897f;
-    --stet-accent: #e0a46d;
-    --stet-selection: rgba(224, 164, 109, 0.28);
-    --stet-hl: rgba(232, 182, 60, 0.22);
-    --stet-hl-todo: rgba(230, 120, 90, 0.22);
-    --stet-raw-bg: rgba(143, 137, 127, 0.16);
-    --stet-quote-rule: rgba(143, 137, 127, 0.4);
-    --stet-bubble-bg: #252421;
-    --stet-bubble-border: #3a3834;
-    --stet-todo: #f08a6c;
-    --stet-misspelled: rgba(255, 105, 97, 0.8);
-    --stet-hint: rgba(110, 170, 255, 0.75);
-    --stet-find: rgba(255, 214, 10, 0.24);
-    --stet-find-current: rgba(255, 204, 0, 0.9);
+    --zadur-bg: #1c1b19;
+    --zadur-text: #e6e1d8;
+    --zadur-muted: #8f897f;
+    --zadur-accent: #e0a46d;
+    --zadur-selection: rgba(224, 164, 109, 0.28);
+    --zadur-hl: rgba(232, 182, 60, 0.22);
+    --zadur-hl-todo: rgba(230, 120, 90, 0.22);
+    --zadur-raw-bg: rgba(143, 137, 127, 0.16);
+    --zadur-quote-rule: rgba(143, 137, 127, 0.4);
+    --zadur-bubble-bg: #252421;
+    --zadur-bubble-border: #3a3834;
+    --zadur-todo: #f08a6c;
+    --zadur-misspelled: rgba(255, 105, 97, 0.8);
+    --zadur-hint: rgba(110, 170, 255, 0.75);
+    --zadur-find: rgba(255, 214, 10, 0.24);
+    --zadur-find-current: rgba(255, 204, 0, 0.9);
   }
 }
 
@@ -52,8 +52,8 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--stet-bg);
-  color: var(--stet-text);
+  background: var(--zadur-bg);
+  color: var(--zadur-text);
 }
 
 body {
@@ -67,96 +67,96 @@ body {
 }
 
 ::selection {
-  background: var(--stet-selection);
+  background: var(--zadur-selection);
 }
 
 /* Live preview ----------------------------------------------------------- */
 
-.stet-scene-break {
+.zadur-scene-break {
   display: inline-block;
   width: 100%;
   text-align: center;
-  color: var(--stet-muted);
+  color: var(--zadur-muted);
 }
 
 /* CriticMarkup ----------------------------------------------------------- */
 
-.stet-critic-hl {
-  background: var(--stet-hl);
+.zadur-critic-hl {
+  background: var(--zadur-hl);
   border-radius: 2px;
 }
 
-.stet-critic-hl.is-todo {
-  background: var(--stet-hl-todo);
+.zadur-critic-hl.is-todo {
+  background: var(--zadur-hl-todo);
 }
 
-.stet-critic-raw {
-  color: var(--stet-muted);
-  background: var(--stet-raw-bg);
+.zadur-critic-raw {
+  color: var(--zadur-muted);
+  background: var(--zadur-raw-bg);
   border-radius: 2px;
 }
 
-.stet-comment-marker {
-  font-family: var(--stet-ui);
+.zadur-comment-marker {
+  font-family: var(--zadur-ui);
   font-size: 0.62em;
   font-weight: 650;
-  color: var(--stet-accent);
+  color: var(--zadur-accent);
   padding: 0 0.12em;
   line-height: 0;
   cursor: pointer;
   user-select: none;
 }
 
-.stet-comment-marker.is-todo {
-  color: var(--stet-todo);
+.zadur-comment-marker.is-todo {
+  color: var(--zadur-todo);
 }
 
-.stet-comment-rail {
+.zadur-comment-rail {
   position: absolute;
   top: 0;
-  width: var(--stet-rail);
+  width: var(--zadur-rail);
   height: 0;
-  font-family: var(--stet-ui);
+  font-family: var(--zadur-ui);
   font-size: 12.5px;
   line-height: 1.4;
 }
 
-.stet-bubble {
+.zadur-bubble {
   position: absolute;
   left: 0;
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px 8px;
-  background: var(--stet-bubble-bg);
-  border: 1px solid var(--stet-bubble-border);
-  border-left: 3px solid var(--stet-accent);
+  background: var(--zadur-bubble-bg);
+  border: 1px solid var(--zadur-bubble-border);
+  border-left: 3px solid var(--zadur-accent);
   border-radius: 6px;
-  color: var(--stet-text);
+  color: var(--zadur-text);
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.stet-bubble.is-todo {
-  border-left-color: var(--stet-todo);
+.zadur-bubble.is-todo {
+  border-left-color: var(--zadur-todo);
 }
 
-.stet-bubble.is-active {
-  border-color: var(--stet-accent);
+.zadur-bubble.is-active {
+  border-color: var(--zadur-accent);
   border-left-width: 3px;
 }
 
-.stet-bubble-meta {
+.zadur-bubble-meta {
   display: flex;
   gap: 6px;
   margin-bottom: 2px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--stet-muted);
+  color: var(--zadur-muted);
 }
 
-.stet-bubble.is-todo .stet-bubble-kind {
-  color: var(--stet-todo);
+.zadur-bubble.is-todo .zadur-bubble-kind {
+  color: var(--zadur-todo);
 }
 
 /* Dev harness (browser only) --------------------------------------------- */
@@ -167,9 +167,9 @@ body {
   align-items: center;
   gap: 6px 16px;
   padding: 8px 16px;
-  font: 12px var(--stet-ui);
-  color: var(--stet-muted);
-  border-bottom: 1px solid var(--stet-bubble-border);
+  font: 12px var(--zadur-ui);
+  color: var(--zadur-muted);
+  border-bottom: 1px solid var(--zadur-bubble-border);
 }
 
 #devbar[hidden] {
@@ -177,7 +177,7 @@ body {
 }
 
 #devbar strong {
-  color: var(--stet-text);
+  color: var(--zadur-text);
 }
 
 #devbar input[type="number"] {
@@ -191,97 +191,97 @@ body {
 
 /* Wiki names --------------------------------------------------------------- */
 
-.stet-wiki-term {
+.zadur-wiki-term {
   text-decoration: underline dotted;
-  text-decoration-color: color-mix(in srgb, var(--stet-accent) 60%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--zadur-accent) 60%, transparent);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 3px;
 }
 
-.cm-tooltip.cm-tooltip-hover:has(.stet-wiki-card) {
+.cm-tooltip.cm-tooltip-hover:has(.zadur-wiki-card) {
   border: none;
   background: transparent;
 }
 
-.stet-wiki-card {
+.zadur-wiki-card {
   max-width: 300px;
   padding: 10px 12px;
-  font: 12.5px/1.45 var(--stet-ui);
-  color: var(--stet-text);
-  background: var(--stet-bubble-bg);
-  border: 1px solid var(--stet-bubble-border);
+  font: 12.5px/1.45 var(--zadur-ui);
+  color: var(--zadur-text);
+  background: var(--zadur-bubble-bg);
+  border: 1px solid var(--zadur-bubble-border);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
 }
 
-.stet-wiki-card-head {
+.zadur-wiki-card-head {
   display: flex;
   align-items: baseline;
   gap: 8px;
   margin-bottom: 4px;
 }
 
-.stet-wiki-card-head span {
+.zadur-wiki-card-head span {
   font-size: 11px;
-  color: var(--stet-muted);
+  color: var(--zadur-muted);
 }
 
-.stet-wiki-card dl {
+.zadur-wiki-card dl {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 1px 10px;
   margin: 6px 0;
 }
 
-.stet-wiki-card dt {
-  color: var(--stet-muted);
+.zadur-wiki-card dt {
+  color: var(--zadur-muted);
 }
 
-.stet-wiki-card dd {
+.zadur-wiki-card dd {
   margin: 0;
 }
 
-.stet-wiki-card p {
+.zadur-wiki-card p {
   margin: 4px 0 6px;
   font-style: italic;
-  color: var(--stet-muted);
+  color: var(--zadur-muted);
 }
 
-.stet-wiki-card button {
+.zadur-wiki-card button {
   all: unset;
   cursor: pointer;
   font-size: 11px;
-  color: var(--stet-accent);
+  color: var(--zadur-accent);
 }
 
 /* Spelling ----------------------------------------------------------------- */
 
-.stet-misspelled {
+.zadur-misspelled {
   text-decoration: underline wavy;
-  text-decoration-color: var(--stet-misspelled);
+  text-decoration-color: var(--zadur-misspelled);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   text-decoration-skip-ink: none;
 }
 
 /* Usage hints (e.g. "Gabriela's" in a German book): quieter than a spelling mistake. */
-.stet-hint {
+.zadur-hint {
   text-decoration: underline dotted;
-  text-decoration-color: var(--stet-hint);
+  text-decoration-color: var(--zadur-hint);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
   text-decoration-skip-ink: none;
 }
 
 /* Matches of the find bar (⌘F); the current one stands out, in dark mode with dark text. */
-.stet-search-match {
-  background: var(--stet-find);
+.zadur-search-match {
+  background: var(--zadur-find);
   border-radius: 2px;
-  box-shadow: 0 0 0 1px var(--stet-find);
+  box-shadow: 0 0 0 1px var(--zadur-find);
 }
 
-.stet-search-current {
-  background: var(--stet-find-current);
-  box-shadow: 0 0 0 1px var(--stet-find-current);
+.zadur-search-current {
+  background: var(--zadur-find-current);
+  box-shadow: 0 0 0 1px var(--zadur-find-current);
   color: #1d1a16;
 }

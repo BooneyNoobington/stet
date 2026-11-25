@@ -4,14 +4,14 @@ import { markdown } from "@codemirror/lang-markdown";
 import { syntaxHighlighting } from "@codemirror/language";
 import { EditorState, type Extension, Transaction } from "@codemirror/state";
 import { EditorView, highlightActiveLine, keymap, type ViewUpdate } from "@codemirror/view";
-import type { HostMessage, StetEditorAPI, StressTestResult } from "./api";
-import { type FormatState, formatState, runFormat, stetKeymap } from "./commands";
+import type { HostMessage, ZadurEditorAPI, StressTestResult } from "./api";
+import { type FormatState, formatState, runFormat, zadurKeymap } from "./commands";
 import { commentRail, criticDecorations, criticField } from "./critic";
 import { startDevHarness } from "./dev";
 import { livePreview } from "./livePreview";
 import { defaultSettings, type EditorSettings, fontStacks, setSettings, settingsField } from "./settings";
 import { type TextStats, textStats } from "./stats";
-import { proseHighlight, stetTheme } from "./theme";
+import { proseHighlight, zadurTheme } from "./theme";
 import { typography } from "./typography";
 import { setWikiTerms, type WikiTerm, wikiExtensions, wikiField, wikiState } from "./wiki";
 import { misspellingField, setMisspellings } from "./spelling";
@@ -25,8 +25,8 @@ interface MessageHandler {
 }
 
 const host: MessageHandler | undefined = (
-  window as unknown as { webkit?: { messageHandlers?: { stet?: MessageHandler } } }
-).webkit?.messageHandlers?.stet;
+  window as unknown as { webkit?: { messageHandlers?: { zadur?: MessageHandler } } }
+).webkit?.messageHandlers?.zadur;
 
 function post(message: HostMessage) {
   if (host) host.postMessage(message);
@@ -41,10 +41,10 @@ let wikiTerms: WikiTerm[] = [];
 
 function applyCssVariables(s: EditorSettings) {
   const root = document.documentElement;
-  root.style.setProperty("--stet-font", fontStacks[s.font]);
-  root.style.setProperty("--stet-size", `${s.fontSize}px`);
-  root.style.setProperty("--stet-line-height", String(s.lineHeight));
-  root.style.setProperty("--stet-column", `${s.columnWidth}em`);
+  root.style.setProperty("--zadur-font", fontStacks[s.font]);
+  root.style.setProperty("--zadur-size", `${s.fontSize}px`);
+  root.style.setProperty("--zadur-line-height", String(s.lineHeight));
+  root.style.setProperty("--zadur-column", `${s.columnWidth}em`);
   root.lang = s.language;
 }
 
@@ -111,7 +111,7 @@ function extensions(): Extension[] {
     EditorView.domEventHandlers({
       // Tell the host what was right-clicked, so the native menu can offer wiki items.
       contextmenu(event, view) {
-        const wikiId = (event.target as HTMLElement).closest<HTMLElement>(".stet-wiki-term")?.dataset.wiki ?? null;
+        const wikiId = (event.target as HTMLElement).closest<HTMLElement>(".zadur-wiki-term")?.dataset.wiki ?? null;
         // The selection if the click is on it, else the word under the mouse (as on a Mac:
         // a right-click elsewhere is about what's there, not about the selection).
         const selection = view.state.selection.main;
@@ -133,13 +133,13 @@ function extensions(): Extension[] {
     keymap.of([
       // Not handled here: the app still gets Esc (e.g. to close a comparison).
       { key: "Escape", run: () => (post({ type: "escape" }), false) },
-      ...stetKeymap,
+      ...zadurKeymap,
       ...defaultKeymap,
       ...historyKeymap,
     ]),
     markdown(),
     syntaxHighlighting(proseHighlight),
-    stetTheme,
+    zadurTheme,
     EditorView.lineWrapping,
     highlightActiveLine(),
     misspellingField,
@@ -156,7 +156,7 @@ function extensions(): Extension[] {
     })),
     EditorView.editorAttributes.of((view) => {
       const s = view.state.field(settingsField);
-      const classes = [s.focusMode && "stet-focus", s.showComments && "stet-comments-on"].filter(Boolean);
+      const classes = [s.focusMode && "zadur-focus", s.showComments && "zadur-comments-on"].filter(Boolean);
       return classes.length ? { class: classes.join(" ") } : null;
     }),
     criticField,
@@ -187,7 +187,7 @@ function measureTyping(samples = 100): number {
   return Math.round(perKeystroke * 100) / 100;
 }
 
-const api: StetEditorAPI = {
+const api: ZadurEditorAPI = {
   load(text) {
     view.setState(EditorState.create({ doc: text, extensions: extensions() }));
     view.scrollDOM.scrollTop = 0;
@@ -281,7 +281,7 @@ const api: StetEditorAPI = {
   },
   setMisspellings(list) {
     view.dispatch({ effects: setMisspellings.of(list) });
-    return view.dom.querySelectorAll(".stet-misspelled, .stet-hint").length;
+    return view.dom.querySelectorAll(".zadur-misspelled, .zadur-hint").length;
   },
   selectedText() {
     const range = view.state.selection.main;
@@ -332,13 +332,13 @@ const api: StetEditorAPI = {
   },
 };
 
-(window as unknown as { stet: StetEditorAPI }).stet = api;
+(window as unknown as { zadur: ZadurEditorAPI }).zadur = api;
 applyCssVariables(settings);
 
 if (host) {
   post({ type: "ready" });
 } else {
   // Browser only: expose the view for debugging from the console.
-  (window as unknown as { stetView: EditorView }).stetView = view;
+  (window as unknown as { zadurView: EditorView }).zadurView = view;
   startDevHarness(api);
 }

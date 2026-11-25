@@ -83,7 +83,7 @@ function build(view: EditorView): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     for (const hit of find(state, view.state.sliceDoc(from, to), from)) {
       decorations.push(
-        Decoration.mark({ class: "stet-wiki-term", attributes: { "data-wiki": hit.term.id } }).range(hit.from, hit.to),
+        Decoration.mark({ class: "zadur-wiki-term", attributes: { "data-wiki": hit.term.id } }).range(hit.from, hit.to),
       );
     }
   }
@@ -114,9 +114,9 @@ const kindLabels: Record<string, string> = { character: "Figur", place: "Ort", t
 
 function card(term: WikiTerm, open: (id: string) => void): HTMLElement {
   const dom = document.createElement("div");
-  dom.className = "stet-wiki-card";
+  dom.className = "zadur-wiki-card";
   const head = dom.appendChild(document.createElement("div"));
-  head.className = "stet-wiki-card-head";
+  head.className = "zadur-wiki-card-head";
   head.append(Object.assign(document.createElement("strong"), { textContent: term.title }));
   head.append(Object.assign(document.createElement("span"), { textContent: kindLabels[term.kind] ?? term.kind }));
   if (term.facts.length) {
@@ -156,7 +156,7 @@ export function wikiExtensions(open: (id: string) => void): Extension[] {
     EditorView.domEventHandlers({
       mousedown(event) {
         if (!event.metaKey) return false;
-        const target = (event.target as HTMLElement).closest<HTMLElement>(".stet-wiki-term");
+        const target = (event.target as HTMLElement).closest<HTMLElement>(".zadur-wiki-term");
         const id = target?.dataset.wiki;
         if (!id) return false;
         event.preventDefault();
