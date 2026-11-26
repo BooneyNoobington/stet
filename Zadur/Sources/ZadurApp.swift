@@ -195,18 +195,21 @@ struct ZadurCommands: Commands {
                 .keyboardShortcut("y", modifiers: [.command, .option])
                 .disabled(model.session == nil)
         }
-        CommandGroup(replacing: .appInfo) {
-            Button("Über Zadur") {
-                let style = NSMutableParagraphStyle()
-                style.alignment = .center
-                NSApp.orderFrontStandardAboutPanel(options: [.credits: NSAttributedString(string: AppModel.tagline, attributes: [
-                    .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle: style, .foregroundColor: NSColor.secondaryLabelColor,
-                ])])
+        // At most 10 groups at this level: Xcode 26 (GitHub's test machines) takes no more.
+        Group {
+            CommandGroup(replacing: .appInfo) {
+                Button("Über Zadur") {
+                    let style = NSMutableParagraphStyle()
+                    style.alignment = .center
+                    NSApp.orderFrontStandardAboutPanel(options: [.credits: NSAttributedString(string: AppModel.tagline, attributes: [
+                        .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), .paragraphStyle: style, .foregroundColor: NSColor.secondaryLabelColor,
+                    ])])
+                }
             }
-        }
-        CommandGroup(after: .appInfo) {
-            Button("Nach Updates suchen …") { model.updater?.checkForUpdates(nil) }
-                .disabled(model.updater == nil)
+            CommandGroup(after: .appInfo) {
+                Button("Nach Updates suchen …") { model.updater?.checkForUpdates(nil) }
+                    .disabled(model.updater == nil)
+            }
         }
         CommandGroup(replacing: .help) {
             Button("Zadur-Hilfe") { model.openWindowAction?(id: "help") }
