@@ -160,7 +160,7 @@ The package is specified as an open format of its own, **Crea** (spec, schemas, 
 
 - **Names.** Trailers `Crea-…`, snapshots `refs/crea/snapshots/<device>`, stamps `refs/notes/crea-stamps` with `crea-stamp` lines, receipts `Crea-Receipt 1`. Stet 1.0's `Stet-…`, `refs/stet/snapshots/…` (moved on opening, `Book.adoptCreaNames`), `refs/notes/stet-stamps` and `Stet-Beleg 1` are still read. App-specific things keep Zadur's name: `Zadur-Imported-From:`, the server probe `refs/zadur/probe/main`, `.local/zadur-*.json`.
 - **Extension.** Books are `.crea` (type `io.github.crea-format.book`, exported). Books from before the new name end in `.stet` (`io.github.booneynoobington.stet.book`) and open the same way (§2a). Backups are `.crea.zip`; `.stet.zip` ones are listed, kept and restored together with them.
-- **Open:** whether a book should become a single archive (text plus `history.bundle`) instead of a folder. The extension would stay.
+- **A folder, not one file** (decided 26 Nov 2026). A book as one ZIP, unpacked into a working copy and packed back on saving, was built and tried (branch `crea-archive-test`, its DESIGN §4.6). It works, but it adds moving parts (working copies, packing, conflict copies) and needs more for things a folder has for free (the cover in Finder); the safety against sync services is had otherwise (the warning in §4.4, git noticing damage, a git server). And a folder stays a valid book for anyone who stops using Zadur.
 - **Without history.** A book without `.git` (e.g. from another program) gets one on opening (`startHistoryIfNeeded`: `.gitignore`, `git init`, the current state as the first version, a notice). Book git commands run with `GIT_DIR`/`GIT_WORK_TREE` set to the book, so git never uses the repository of a folder around the book, nor a book folder that looks like a bare repository.
 - **Other programs' keys** in `manuscript.yaml`, scene, wiki and feedback front matter are kept when Zadur saves.
 
@@ -362,7 +362,7 @@ A backup is **one ZIP file** of the whole package: history, experiments, milesto
 - **Written safely**: `/usr/bin/zip` into a temporary folder, checked with `unzip -t`, then moved into the target in one step. A half-written backup never appears there, which matters for synced folders.
 - **A single file is fine for sync services.** Unlike a live book, a backup may sit in Nextcloud, iCloud or Dropbox, or on an external drive.
 - **Backup sichern … (⌥⌘B)** writes a backup to a file of the writer's choice.
-- **Backup wiederherstellen …** unpacks a backup into a chosen folder and opens it. A book of the same name stays untouched (the restored one is called "… (wiederhergestellt)"); the archive is checked first.
+- **Backup wiederherstellen …** unpacks a backup into a chosen folder and opens it. A book of the same name stays untouched (the restored one is called "… (wiederhergestellt)"); the archive is checked first, for damage and for anything that would land outside the book or point elsewhere (§15).
 - **Automatic backups** (Inspector ▸ Buch ▸ Backups, or Ablage ▸ Backups einstellen …) are per book and per Mac (`.local/zadur-state.json`). They run at most once every 20 hours, on opening or after ⌘S, into a chosen folder (default `~/Documents/Zadur-Backups`), and keep the newest N of this book (other books' backups in the same folder are not touched). If the folder is unavailable, e.g. a drive is unplugged, the inspector shows a quiet hint instead of an error dialog.
 - The server and Time Machine are further backups.
 
@@ -439,6 +439,7 @@ Tests run against a local authority (`LocalTestTSA`: `openssl ts -reply` with a 
   - **Servers** are asked about first (`ServerTrust`): a book's server is only contacted if it was set up on this Mac or the writer agreed ("Kenne ich"); every address of the remote counts. Pushing to a folder would otherwise run that folder's hooks. Servers of books opened before this existed count as known.
   - **SSH keys** count only if they are Zadur's own (a plain file in its keys folder); the command is always rebuilt from the key, never taken from the book.
   - **Importing a folder** compares it with the copy's fresh `.git` instead of running git with the folder's own settings.
+  - **ZIPs** (a backup to restore, a wiki to import) are looked into before anything is unpacked (`ZipCheck`, `ZipCheckTests`): absolute paths, `..`, links, devices and encrypted entries are refused. A link could otherwise make Zadur read and show any file on this Mac, e.g. a wiki entry that is really `~/.ssh/id_rsa`.
 - All git access goes through one `GitClient` actor in `ZadurCore`, so the backend can be swapped.
 - Requires git ≥ 2.34 (SSH signing). Apple Git 2.54 was current at the time of writing.
 

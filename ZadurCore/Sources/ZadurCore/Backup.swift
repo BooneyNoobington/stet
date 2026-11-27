@@ -121,8 +121,10 @@ public enum Backup {
     }
 
     /// Unpacks a backup into `folder` and returns the book. An existing book of the same name stays.
+    /// A backup may come from someone else: nothing in it may point or land outside the book.
     public static func restore(_ zip: URL, into folder: URL) async throws -> URL {
         try await verify(zip)
+        try ZipCheck.check(zip)
         let fm = FileManager.default
         let work = fm.temporaryDirectory.appendingPathComponent("zadur-restore-\(UUID().uuidString)")
         try fm.createDirectory(at: work, withIntermediateDirectories: true)

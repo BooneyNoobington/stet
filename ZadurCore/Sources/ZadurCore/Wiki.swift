@@ -296,6 +296,7 @@ extension Book {
         var isFolder: ObjCBool = false
         guard fm.fileExists(atPath: source.path, isDirectory: &isFolder) else { throw WikiTransferError.nothingFound(source.lastPathComponent) }
         if !isFolder.boolValue {
+            try ZipCheck.check(source)  // a link in there could pull any file into the wiki
             let temp = fm.temporaryDirectory.appendingPathComponent("zadur-wiki-\(UUID().uuidString)")
             defer { try? fm.removeItem(at: temp) }
             try fm.createDirectory(at: temp, withIntermediateDirectories: true)
