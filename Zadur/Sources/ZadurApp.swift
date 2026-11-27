@@ -82,6 +82,9 @@ struct ZadurCommands: Commands {
             Button("Version sichern") { Task { await model.session?.saveVersion() } }
                 .keyboardShortcut("s")
                 .disabled(model.session == nil)
+            Button("Sichern unter …") { model.showSaveAsPanel() }
+                .keyboardShortcut("s", modifiers: [.command, .shift])
+                .disabled(model.session == nil)
         }
         CommandGroup(after: .pasteboard) {
             Divider()

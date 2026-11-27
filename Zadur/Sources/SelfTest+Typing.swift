@@ -168,6 +168,9 @@ extension SelfTest {
         let received = await receivedBookChecks(work: work)
         report.merge(received.report) { _, new in new }
         failures += received.failures
+        let savedAs = await saveAsChecks(work: work)
+        report.merge(savedAs.report) { _, new in new }
+        failures += savedAs.failures
         finish(report, failures: failures)
     }
 
@@ -539,7 +542,7 @@ extension SelfTest {
     }
 
     /// The folder given after `--selftest-typing`, for pictures of the windows.
-    private static var pictureFolder: URL? {
+    static var pictureFolder: URL? {
         guard let flag = CommandLine.arguments.firstIndex(of: "--selftest-typing"), CommandLine.arguments.indices.contains(flag + 1) else { return nil }
         return URL(fileURLWithPath: CommandLine.arguments[flag + 1])
     }

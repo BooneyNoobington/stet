@@ -181,6 +181,8 @@ enum HelpContent {
         Zadur legt einmal am Tag ein **Backup** an (Ablage ▸ Backups einstellen): eine ZIP-Datei mit dem ganzen Buch und seiner ganzen Geschichte. Am besten auf einer externen Festplatte oder einem Netzlaufwerk.
 
         Von Hand: Ablage ▸ Backup sichern (⌥⌘B). Zurückholen: Ablage ▸ Backup wiederherstellen – Zadur legt dabei eine Kopie an und überschreibt nichts.
+
+        **Sichern unter** (⇧⌘S) legt eine vollständige Kopie des Buchs an einem anderen Ort an, mit allen Versionen, und du schreibst in der Kopie weiter. Das Original bleibt, wie es war. Hat das Buch einen Server, entscheidest du, ob die Kopie mit ihm verbunden bleibt.
         """),
         HelpTopic(id: "server", title: "Server und mehrere Macs", symbol: "server.rack", text: """
         Mit einem **Server** ist dein Buch auf mehreren Macs gleich: Zadur schickt nach jedem ⌘S alles an den Server und holt beim Öffnen, was ein anderer Mac geschrieben hat. Überschrieben wird nie etwas; haben zwei Macs an derselben Stelle geschrieben, entscheidest du.

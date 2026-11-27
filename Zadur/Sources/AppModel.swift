@@ -194,6 +194,80 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: Saving a book in another place
+
+    /// "Sichern unter …": where the copy goes and, for a book with a server, whether the copy
+    /// stays connected. The window then continues in the copy.
+    func showSaveAsPanel() {
+        guard let session else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.creaBook]
+        panel.nameFieldStringValue = session.book.url.deletingPathExtension().lastPathComponent
+        panel.message = "Eine vollständige Kopie mit allen Versionen. Danach schreibst du in der Kopie weiter; das Original bleibt, wie es jetzt ist."
+        panel.prompt = "Sichern"
+        panel.canCreateDirectories = true
+        let check = CopyDestinationCheck(book: session.book)
+        panel.delegate = check
+        var serverBox: NSButton?
+        if session.isConnected {
+            let accessory = Self.saveAsAccessory()
+            panel.accessoryView = accessory.view
+            serverBox = accessory.box
+        }
+        let answer = panel.runModal()
+        withExtendedLifetime(check) {}
+        guard answer == .OK, let url = panel.url else { return }
+        let keepServer = serverBox.map { $0.state == .on } ?? true
+        Task { await saveCurrentBook(as: url, keepServer: keepServer) }
+    }
+
+    static func saveAsAccessory() -> (view: NSView, box: NSButton) {
+        let box = NSButton(checkboxWithTitle: "Mit dem Server verbunden bleiben", target: nil, action: nil)
+        box.state = .on
+        let note = NSTextField(wrappingLabelWithString: "An: dasselbe Buch an einem zweiten Ort; es gleicht sich mit dem Server ab wie ein zweiter Mac. Aus: eine unabhängige Kopie, die du später mit einem anderen Server verbinden kannst.")
+        note.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        note.textColor = .secondaryLabelColor
+        note.preferredMaxLayoutWidth = 400
+        let stack = NSStackView(views: [box, note])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.edgeInsets = NSEdgeInsets(top: 12, left: 20, bottom: 12, right: 20)
+        stack.frame.size = stack.fittingSize
+        return (stack, box)
+    }
+
+    /// Copies the open book to `destination` and continues there. The original keeps everything
+    /// up to this moment, unsaved text included.
+    @discardableResult
+    func saveCurrentBook(as destination: URL, keepServer: Bool) async -> Bool {
+        guard let session else { return false }
+        let book = session.book
+        do {
+            try book.checkCopyDestination(destination)
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+        busyMessage = "Buch wird gesichert …"
+        defer { busyMessage = nil }
+        await closeBook()  // writes the editor's text, takes a snapshot, stops syncing
+        do {
+            let copy = try Book(url: try await book.copy(to: destination, keepServer: keepServer))
+            // The new place gets its own check for sync services.
+            var state = LocalState.load(for: copy)
+            state.keepInSyncedFolder = false
+            state.save(for: copy)
+        } catch {
+            errorMessage = "Das Buch ließ sich nicht sichern: \(error.localizedDescription) Das Original ist unverändert."
+            await open(book.url)
+            return false
+        }
+        await open(destination)
+        self.session?.showToast(BookSession.Toast(message: "Gesichert als „\(destination.deletingPathExtension().lastPathComponent)“. Das Original bleibt, wie es war."))
+        return true
+    }
+
     // MARK: Renaming a book from when Zadur was called Stet
 
     /// `.stet` → `.crea`: only the name of the book's folder changes.
@@ -248,5 +322,16 @@ final class AppModel: ObservableObject {
                 await open(source)
             }
         }
+    }
+}
+
+/// Keeps the save panel open with a reason when the copy can't go there (another book, or
+/// inside the book itself).
+final class CopyDestinationCheck: NSObject, NSOpenSavePanelDelegate {
+    let book: Book
+    init(book: Book) { self.book = book }
+
+    func panel(_ sender: Any, validate url: URL) throws {
+        try book.checkCopyDestination(url)
     }
 }

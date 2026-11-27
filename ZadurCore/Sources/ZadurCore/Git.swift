@@ -344,7 +344,13 @@ public final class Git {
     public func integrityProblem() async -> String? {
         guard await headCommit() != nil else { return nil }
         do {
-            let output = try await run(["fsck", "--connectivity-only", "--no-progress", "--no-dangling"], allowedStatus: [0, 1, 2])
+            // Without checking the commit-graph and multi-pack-index files (optional speed-ups):
+            // fsck hands their checks the book's path as an argument, git composes it (ä as one
+            // character), while GIT_DIR keeps the decomposed form macOS passes on to programs
+            // (a + ¨, whatever Zadur sends). The two don't match, and fsck called every book with
+            // an umlaut in its path damaged. The history itself is still checked in full.
+            let output = try await run(["-c", "core.commitGraph=false", "-c", "core.multiPackIndex=false",
+                                        "fsck", "--connectivity-only", "--no-progress", "--no-dangling"], allowedStatus: [0, 1, 2])
             let message = (output.stderr + output.string).trimmingCharacters(in: .whitespacesAndNewlines)
             return output.status == 0 ? nil : (message.isEmpty ? "git fsck meldet Fehler" : message)
         } catch {

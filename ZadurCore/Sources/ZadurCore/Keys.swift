@@ -133,8 +133,14 @@ extension Book {
     /// Stops using the book's key and deletes it from this Mac. (Remove it on the server too.)
     public func removeZadurKey() async throws {
         let key = await zadurKey()
+        try await forgetZadurKey()
+        try key?.delete()
+    }
+
+    /// Stops using the book's key but keeps it (e.g. a copy no longer connected; the original
+    /// still uses the key).
+    func forgetZadurKey() async throws {
         try await git.run(["config", "--unset", Self.keyConfig], allowedStatus: [0, 5])
         try await git.run(["config", "--unset", "core.sshCommand"], allowedStatus: [0, 5])
-        try key?.delete()
     }
 }
